@@ -1,0 +1,81 @@
+import { NextResponse } from "next/server";
+import { readDB, writeDB, deleteOrderFromDB } from "@/lib/db";
+import { sendOrderConfirmationWhatsApp } from "@/lib/whatsapp-notifications";
+import { cancelOrderInLogistics } from "@/lib/logistics";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const db = await readDB(true);
+  return NextResponse.json(
+    { orders: db.orders || [] },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0, s-maxage=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      },
+    }
+  );
+}
+
+export async function POST(request: Request) {
+  try {
+    const { orderId, newStatus } = await request.json();
+    const db = await readDB(true);
+
+    const orderIndex = db.orders.findIndex((o) => o.id === orderId);
+    if (orderIndex === -1) {
+      return NextResponse.json({ success: false, error: "Order not found." }, { status: 404 });
+    }
+
+    const prevStatus = db.orders[orderIndex].status;
+    db.orders[orderIndex].status = newStatus;
+
+    if (newStatus === "Cancelled") {
+      db.orders[orderIndex].cancellationReason = "Cancelled by Admin";
+      db.orders[orderIndex].cancelledBy = "Admin";
+      db.orders[orderIndex].cancellationDate = new Date().toISOString();
+      try {
+        await cancelOrderInLogistics(db.orders[orderIndex], "Cancelled by Admin", db);
+      } catch (logisticsErr) {
+        console.error("[Admin Orders Route Logistics Cancel Error]:", logisticsErr);
+      }
+    }
+
+    await writeDB(db);
+
+    // If status changed to Confirmed, send WhatsApp Order Confirmation to customer
+    if (newStatus === "Confirmed" && prevStatus !== "Confirmed") {
+      try {
+        await sendOrderConfirmationWhatsApp(db.orders[orderIndex]);
+      } catch (waErr) {
+        console.error("[Admin Order Confirmation WhatsApp Error]:", waErr);
+      }
+    }
+
+    return NextResponse.json({ success: true, message: "Order status updated successfully!" });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const orderId = body.orderId || body.id;
+    if (!orderId) {
+      return NextResponse.json({ success: false, error: "Order ID is required." }, { status: 400 });
+    }
+
+    const success = await deleteOrderFromDB(orderId);
+    if (!success) {
+      return NextResponse.json({ success: false, error: "Failed to delete order from database." }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: "Order deleted permanently." });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 });
+  }
+}
+

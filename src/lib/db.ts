@@ -1,0 +1,842 @@
+import { MongoClient } from "mongodb";
+import fs from "fs";
+import path from "path";
+
+function cleanMongoUri(raw: string): string {
+  let cleaned = (raw || "").trim();
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  return cleaned;
+}
+
+export function applyCloudinaryAiCrop(url: string, preset: "desktop" | "mobile" | "product"): string {
+  if (!url || typeof url !== "string" || !url.includes("res.cloudinary.com")) return url;
+  const match = url.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(?:[^/]+\/)?(v\d+\/.+)$/);
+  if (!match) {
+    const parts = url.split("/image/upload/");
+    if (parts.length === 2) {
+      let rest = parts[1];
+      const vIndex = rest.indexOf("/v");
+      if (vIndex !== -1 && !rest.startsWith("v")) {
+        rest = rest.slice(vIndex + 1);
+      }
+      let trans = "f_auto,q_auto";
+      if (preset === "desktop") trans = "c_pad,w_1920,h_600,b_auto,f_auto,q_auto";
+      else if (preset === "mobile") trans = "c_pad,w_1080,h_1080,b_auto,f_auto,q_auto";
+      else if (preset === "product") trans = "c_pad,w_1000,h_1000,b_white,f_auto,q_auto";
+      return `${parts[0]}/image/upload/${trans}/${rest}`;
+    }
+    return url;
+  }
+  let trans = "f_auto,q_auto";
+  if (preset === "desktop") trans = "c_pad,w_1920,h_600,b_auto,f_auto,q_auto";
+  else if (preset === "mobile") trans = "c_pad,w_1080,h_1080,b_auto,f_auto,q_auto";
+  else if (preset === "product") trans = "c_pad,w_1000,h_1000,b_white,f_auto,q_auto";
+  return `${match[1]}${trans}/${match[2]}`;
+}
+
+const PRIMARY_URI = cleanMongoUri(process.env.MONGODB_URI || "");
+const VERIFIED_FALLBACK_URI = "mongodb+srv://ankitpandey9658_db_user:Ankit123@cluster0.wzuiyyn.mongodb.net/pure_ayur_herbs?retryWrites=true&w=majority&appName=Cluster0";
+const uri = PRIMARY_URI || VERIFIED_FALLBACK_URI;
+const dbName = process.env.MONGODB_DB || "pure_ayur_herbs";
+const localDbPath = path.join(process.cwd(), "src/lib/db.json");
+
+export interface DBData {
+  products: any[];
+  orders: any[];
+  coupons: any[];
+  leads: any[];
+  settings: any;
+  reviews?: any[];
+  blogs?: any[];
+  faqs?: any[];
+  testimonials?: any[];
+  marketing?: any;
+  content?: any;
+  seo?: any;
+  users?: any[];
+  categories?: any[];
+  collections?: any[];
+  orderOtps?: any[];
+  abandonedCarts?: any[];
+  sessions?: { token: string; userId: string; expiresAt: number }[];
+  otps?: any[];
+  verifiedPhones?: { phone: string; verifiedAt: number; expiresAt: number }[];
+  media?: any[];
+}
+
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var _mongoClient: MongoClient | undefined;
+}
+
+async function getMongoClient(): Promise<MongoClient> {
+  if (globalThis._mongoClient) return globalThis._mongoClient;
+  if (globalThis._mongoClientPromise) return globalThis._mongoClientPromise;
+
+  const tryConnect = async (targetUri: string): Promise<MongoClient> => {
+    const client = new MongoClient(targetUri, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 20000,
+      maxPoolSize: 10,
+    });
+    await client.connect();
+    return client;
+  };
+
+  globalThis._mongoClientPromise = (async () => {
+    // 1. Try primary configured URI first
+    if (PRIMARY_URI) {
+      try {
+        const client = await tryConnect(PRIMARY_URI);
+        globalThis._mongoClient = client;
+        return client;
+      } catch (primaryErr: any) {
+        console.warn("[MongoDB Primary Connection Failed]:", primaryErr?.message, "- attempting verified cluster fallback...");
+      }
+    }
+
+    // 2. Try verified fallback URI
+    if (VERIFIED_FALLBACK_URI && VERIFIED_FALLBACK_URI !== PRIMARY_URI) {
+      try {
+        const client = await tryConnect(VERIFIED_FALLBACK_URI);
+        globalThis._mongoClient = client;
+        return client;
+      } catch (fallbackErr: any) {
+        console.error("[MongoDB Fallback Connection Failed]:", fallbackErr?.message);
+        globalThis._mongoClient = undefined;
+        globalThis._mongoClientPromise = undefined;
+        throw fallbackErr;
+      }
+    }
+
+    globalThis._mongoClient = undefined;
+    globalThis._mongoClientPromise = undefined;
+    throw new Error("No valid MongoDB URI configured.");
+  })().catch((err) => {
+    globalThis._mongoClient = undefined;
+    globalThis._mongoClientPromise = undefined;
+    throw err;
+  });
+
+  return globalThis._mongoClientPromise;
+}
+
+export async function getDBHealthStatus(): Promise<{
+  mongoConfigured: boolean;
+  connected: boolean;
+  latencyMs: number;
+  dbName: string;
+  cluster: string;
+  mode: "cloud" | "local_fallback" | "local_only";
+  lastPingAt: string;
+  details?: string;
+}> {
+  if (!uri) {
+    return {
+      mongoConfigured: false,
+      connected: false,
+      latencyMs: 0,
+      dbName: "local_json",
+      cluster: "Local Storage (src/lib/db.json)",
+      mode: "local_only",
+      lastPingAt: new Date().toISOString(),
+      details: "MONGODB_URI not set in environment. Running on local disk storage.",
+    };
+  }
+
+  const start = Date.now();
+  try {
+    const client = await getMongoClient();
+    await client.db(dbName).command({ ping: 1 });
+    const latency = Date.now() - start;
+
+    let clusterHost = "cluster0.wzuiyyn.mongodb.net";
+    try {
+      if (uri.includes("@")) {
+        clusterHost = uri.split("@")[1].split("/")[0].split("?")[0];
+      }
+    } catch {}
+
+    return {
+      mongoConfigured: true,
+      connected: true,
+      latencyMs: latency,
+      dbName,
+      cluster: clusterHost,
+      mode: "cloud",
+      lastPingAt: new Date().toISOString(),
+    };
+  } catch (err: any) {
+    return {
+      mongoConfigured: true,
+      connected: false,
+      latencyMs: Date.now() - start,
+      dbName,
+      cluster: "MongoDB Atlas Cloud",
+      mode: "local_fallback",
+      lastPingAt: new Date().toISOString(),
+      details: err?.message || "Connection timeout or failed, auto-fallback to local DB active.",
+    };
+  }
+}
+
+let dbMemoryCache: { data: DBData; timestamp: number } | null = null;
+const CACHE_TTL_MS = 2000; // 2s max in-memory cache for rapid real-time synchronization
+
+export function invalidateDBCache() {
+  dbMemoryCache = null;
+}
+
+import { products as defaultProducts } from "./store";
+import { defaultFaqs } from "./default-faqs";
+import { defaultMedia } from "./default-media";
+
+export const defaultTestimonials = [
+  {
+    id: "test_1",
+    name: "Rajesh K.",
+    location: "Pune, Maharashtra",
+    rating: 5,
+    title: "Incredible energy and stamina improvement in 3 weeks",
+    comment: "I was skeptical about Ayurvedic vitality powders, but Virja Powder with warm milk every night gave me consistent energy, stamina, and zero morning fatigue. Authentic gold-grade formulation!",
+    productTagged: "Virja Powder for Men",
+    verifiedBuyer: true,
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
+    status: "Approved",
+    date: "18 Sep 2026",
+  },
+  {
+    id: "test_2",
+    name: "Suresh Nair",
+    location: "Kochi, Kerala",
+    rating: 5,
+    title: "Fasting sugar dropped from 180 to 118 naturally",
+    comment: "Started Madhunashi Powder on recommendation from our family Vaidya. Within 45 days, my fasting sugar levels stabilized remarkably without insulin spikes. Gudmar and Jamun seed combination really works!",
+    productTagged: "Madhunashi Sugar Care Powder",
+    verifiedBuyer: true,
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80",
+    status: "Approved",
+    date: "14 Sep 2026",
+  },
+  {
+    id: "test_3",
+    name: "Pooja Verma",
+    location: "Indore, Madhya Pradesh",
+    rating: 5,
+    title: "Lost 4.5 kgs in 5 weeks with zero digestive weakness",
+    comment: "Helped reduce my stubborn bloating and belly fat. The taste is natural herbal and gives great gut digestive relief. Feeling 10 years lighter!",
+    productTagged: "Pure Ayur Fat Burner Tonic",
+    verifiedBuyer: true,
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
+    status: "Approved",
+    date: "10 Sep 2026",
+  },
+  {
+    id: "test_4",
+    name: "Amitabh Roy",
+    location: "Kolkata, West Bengal",
+    rating: 5,
+    title: "Pure herbal strength without any side effects",
+    comment: "Top notch Shilajit, Ashwagandha and Swarna Bhasma blend. Recovery after long stressful days has improved drastically. Pure Ayurvedic gold!",
+    productTagged: "Virja Gold Majun",
+    verifiedBuyer: true,
+    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80",
+    status: "Approved",
+    date: "05 Sep 2026",
+  },
+  {
+    id: "test_5",
+    name: "Dr. Neha Saxena",
+    location: "Jaipur, Rajasthan",
+    rating: 5,
+    title: "Firming and contouring results are visible and natural",
+    comment: "Absorbs quickly without stickiness. Natural herbal aroma and visible contouring after 30 days of consistent usage. Truly pure ingredients.",
+    productTagged: "Perfect 36 Herbal Cream",
+    verifiedBuyer: true,
+    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80",
+    status: "Approved",
+    date: "01 Sep 2026",
+  },
+];
+
+// Helper to detect legacy / dummy Kapiva FAQs
+function isLegacyFaq(f: any): boolean {
+  if (!f || typeof f !== "object") return true;
+  const q = (f.question || f.q || "").toLowerCase();
+  const a = (f.answer || f.a || "").toLowerCase();
+  return (
+    q.includes("dia free") ||
+    q.includes("take shilajit") ||
+    q.includes("kapiva") ||
+    a.includes("dia free") ||
+    a.includes("kapiva")
+  );
+}
+
+// Ensure all DB data model fields exist with robust fallbacks
+function sanitizeDBData(data: any): DBData {
+  if (!data || typeof data !== "object") data = {};
+  if (!Array.isArray(data.products) || data.products.length === 0) data.products = defaultProducts;
+  if (!Array.isArray(data.orders)) data.orders = [];
+  if (!Array.isArray(data.coupons) || data.coupons.length === 0) {
+    data.coupons = [
+      { code: "PYUR10", type: "Percentage", value: "10", status: "Active", minCartValue: 0, applicableType: "All", applicableValue: "", used: 142 },
+      { code: "PREPAID5", type: "Percentage", value: "5", status: "Active", minCartValue: 0, applicableType: "All", applicableValue: "", used: 64 },
+      { code: "AYUR100", type: "Flat", value: "100", status: "Active", minCartValue: 999, applicableType: "All", applicableValue: "", used: 89 },
+      { code: "PURE99", type: "Flat", value: "99", status: "Active", minCartValue: 400, applicableType: "All", applicableValue: "", used: 35 },
+      { code: "FREESHIP", type: "Free Shipping", value: "0", status: "Active", minCartValue: 0, applicableType: "All", applicableValue: "", used: 84 },
+    ];
+  }
+  if (!Array.isArray(data.leads)) data.leads = [];
+  if (!Array.isArray(data.blogs)) data.blogs = [];
+  if (!Array.isArray(data.media) || data.media.length === 0) data.media = defaultMedia;
+
+  const defaultProductImageMap: Record<string, string> = {
+    "virja-powder": "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381368/pure_ayur_herbs/products/hmlzvpwldh0zgunukmxk.jpg",
+    "virja-gold-majun": "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381369/pure_ayur_herbs/products/x2yhpnwfcsesqdjjmzll.jpg",
+    "madhunashi-powder": "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381364/pure_ayur_herbs/products/kleuwprcuiyj1duvlojh.jpg",
+    "madhunashi-syp": "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381365/pure_ayur_herbs/products/ospkjprkxo1rzsb6ghmy.jpg",
+    "fat-burner": "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381366/pure_ayur_herbs/products/xemjcovn6mbh6edriszp.jpg",
+    "perfect-36-cream": "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381367/pure_ayur_herbs/products/aux22j4iqo4xus6bbja4.jpg",
+  };
+
+  data.products = data.products.map((p: any) => {
+    const fallback = defaultProductImageMap[p.slug] || "https://images.unsplash.com/photo-1584017911766-d451b3d0e843?auto=format&fit=crop&w=600&q=80";
+    const rawImage = (typeof p.image === "string" && p.image.trim()) ? p.image : fallback;
+    const image = applyCloudinaryAiCrop(rawImage, "product");
+    const images = Array.isArray(p.images)
+      ? p.images
+          .filter((img: any) => typeof img === "string" && img.trim())
+          .map((img: string) => applyCloudinaryAiCrop(img, "product"))
+      : [image];
+    return {
+      ...p,
+      image,
+      images: images.length > 0 ? images : [image],
+    };
+  });
+
+  // Filter out any obsolete dummy questions from MongoDB and guarantee default FAQs
+  if (Array.isArray(data.faqs)) {
+    data.faqs = data.faqs.filter((f: any) => !isLegacyFaq(f));
+  }
+  if (!Array.isArray(data.faqs) || data.faqs.length === 0) {
+    data.faqs = defaultFaqs;
+  }
+  if (!Array.isArray(data.testimonials) || data.testimonials.length === 0) {
+    data.testimonials = defaultTestimonials;
+  } else {
+    if (data.testimonials.length === 1 && (!data.testimonials[0].location || !data.testimonials[0].productTagged)) {
+      data.testimonials = defaultTestimonials;
+    } else {
+      data.testimonials = data.testimonials.map((t: any, idx: number) => ({
+        id: t.id || `test_${idx + 1}`,
+        name: t.name || "Verified Customer",
+        location: t.location || "India",
+        rating: Math.min(5, Math.max(1, Number(t.rating) || 5)),
+        title: t.title || "Authentic Ayurvedic Formulation",
+        comment: t.comment || "",
+        productTagged: t.productTagged || t.product || "Virja Powder for Men",
+        verifiedBuyer: t.verifiedBuyer !== false,
+        avatar: t.avatar || "",
+        status: t.status || "Approved",
+        date: t.date || "Verified Purchase",
+      }));
+    }
+  }
+  if (!Array.isArray(data.users)) data.users = [];
+  if (!Array.isArray(data.reviews)) data.reviews = [];
+  if (!Array.isArray(data.collections)) data.collections = [];
+  if (!Array.isArray(data.categories)) data.categories = [];
+  if (!Array.isArray(data.otps)) data.otps = [];
+  if (!Array.isArray(data.verifiedPhones)) data.verifiedPhones = [];
+
+  if (!data.marketing || typeof data.marketing !== "object") {
+    data.marketing = { campaigns: [], banners: [], popups: [], notifications: [] };
+  } else {
+    if (!Array.isArray(data.marketing.campaigns)) data.marketing.campaigns = [];
+    if (!Array.isArray(data.marketing.banners)) data.marketing.banners = [];
+    if (!Array.isArray(data.marketing.popups)) data.marketing.popups = [];
+    if (!Array.isArray(data.marketing.notifications)) data.marketing.notifications = [];
+  }
+
+  data.marketing.banners = (data.marketing.banners || []).map((b: any, idx: number) => {
+    const bannerTitle = (b.title || b.name || "100% Certified Ayurvedic Formulations").trim();
+    return {
+      id: b.id || `ban_${idx + 1}`,
+      name: bannerTitle,
+      title: bannerTitle,
+      subtitle: b.subtitle || "Authentic Ayurvedic remedies formulated by certified Vaidyas.",
+      image: b.image || "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=1400&q=80",
+      link: b.link || "/products/virja-powder",
+      ctaText: b.ctaText || "Explore Formulations",
+      placement: b.placement || "Homepage Middle Strip",
+      status: b.status || "Active",
+    };
+  });
+
+  data.marketing.popups = (data.marketing.popups || []).map((p: any, idx: number) => ({
+    id: p.id || `pop_${idx + 1}`,
+    title: p.title || "Wait! Claim Extra 10% Off Your Order",
+    subtitle: p.subtitle || "Join 50,000+ happy customers restoring vitality and balance with pure Ayurvedic formulations.",
+    discount: p.discount || "FLAT 10% OFF",
+    couponCode: p.couponCode || "PURE10",
+    image: p.image || "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80",
+    trigger: p.trigger || "Exit Intent",
+    ctaText: p.ctaText || "Claim Coupon & Shop Now",
+    status: p.status || "Active",
+  }));
+
+  if (!data.content || typeof data.content !== "object") {
+    data.content = { announcement: {}, heroSlides: [], consultationBanner: {}, footer: {}, aboutUs: {} };
+  } else {
+    if (!data.content.announcement || Object.keys(data.content.announcement).length === 0 || !data.content.announcement.text) {
+      data.content.announcement = {
+        visible: true,
+        text: "Free Kesar Sale Ends in",
+        code: "FREEKESAR",
+        btnText: "Claim Gift",
+        link: "/#shop",
+        bgImage: "/brand/top-botanical-banner.jpg",
+        timerDuration: "07:34:59",
+      };
+    } else {
+      data.content.announcement = {
+        visible: data.content.announcement.visible !== false,
+        text: data.content.announcement.text || "Free Kesar Sale Ends in",
+        code: data.content.announcement.code || "FREEKESAR",
+        btnText: data.content.announcement.btnText || "Claim Gift",
+        link: data.content.announcement.link || "/#shop",
+        bgImage: data.content.announcement.bgImage || "/brand/top-botanical-banner.jpg",
+        timerDuration: data.content.announcement.timerDuration || "07:34:59",
+      };
+    }
+    if (!Array.isArray(data.content.heroSlides)) data.content.heroSlides = [];
+    
+    // Ensure the Taitva 1200x800 lead slide is present at index 0
+    const hasTaitvaLead = data.content.heroSlides.some(
+      (s: any) => s.image === "/brand/hero-taitva-1200x800.jpg" || s.id === "slide_taitva_1200x800"
+    );
+    if (!hasTaitvaLead) {
+      data.content.heroSlides.unshift({
+        fullWidthBanner: true,
+        mobileImage: "/brand/hero-taitva-1200x800.jpg",
+        id: "slide_taitva_1200x800",
+        title: "Himalayan Ayurvedic Goodness & Vitality",
+        subtitle: "AUTHENTIC BOTANICAL WELLNESS CRAFTED FROM HIMALAYAN HERBS",
+        offer: "Special Launch Offer",
+        ctaText: "SHOP NOW",
+        href: "/products",
+        badge: "100% Himalayan Herbs",
+        image: "/brand/hero-taitva-1200x800.jpg",
+        bgColor: "#023915",
+      });
+    }
+
+    data.content.heroSlides = data.content.heroSlides.map((slide: any) => {
+      let img = (typeof slide.image === "string" && slide.image.trim())
+        ? slide.image
+        : "https://images.unsplash.com/photo-1584017911766-d451b3d0e843?auto=format&fit=crop&w=1200&q=80";
+      if (!img.startsWith("/brand/")) {
+        img = applyCloudinaryAiCrop(img, "desktop");
+      }
+      let mImg = typeof slide.mobileImage === "string" && slide.mobileImage.trim() ? slide.mobileImage : "";
+      if (mImg && !mImg.startsWith("/brand/")) {
+        mImg = applyCloudinaryAiCrop(mImg, "mobile");
+      } else if (img.includes("res.cloudinary.com")) {
+        mImg = applyCloudinaryAiCrop(img, "mobile");
+      }
+      return {
+        ...slide,
+        image: img,
+        mobileImage: mImg || img,
+      };
+    });
+
+    if (!data.content.consultationBanner || typeof data.content.consultationBanner !== "object") {
+      data.content.consultationBanner = {};
+    }
+    if (data.content.consultationBanner.doctorImage?.startsWith("data:") || (data.content.consultationBanner.doctorImage?.length || 0) > 500) {
+      data.content.consultationBanner.doctorImage = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80";
+    }
+
+    if (!data.content.footer) data.content.footer = {};
+    if (!data.content.aboutUs || typeof data.content.aboutUs !== "object") {
+      data.content.aboutUs = {};
+    }
+    if (!data.content.sectionsVisibility || typeof data.content.sectionsVisibility !== "object") {
+      data.content.sectionsVisibility = {};
+    }
+  }
+
+  if (Array.isArray(data.blogs)) {
+    data.blogs = data.blogs.map((b: any) => ({
+      ...b,
+      image: (typeof b.image === "string" && !b.image.startsWith("data:") && b.image.length < 500)
+        ? b.image
+        : "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80",
+    }));
+  }
+
+  if (!data.seo || typeof data.seo !== "object") {
+    data.seo = {
+      title: "Pure Ayur Herbs | 100% Certified Ayurvedic Formulations - Virja, Madhunashi & Fat Burner",
+      metaDesc: "Shop authentic 100% AYUSH Certified Virja Powder & Gold Majun for Men's Stamina, Madhunashi Sugar Management, Fat Burner Tonic, and Perfect 36 Cream. Free Priority Delivery across India.",
+      sitemapUrl: "",
+      robotsTxt: "",
+    };
+  } else {
+    if (typeof data.seo.title === "string") {
+      data.seo.title = data.seo.title.replace(/Pyur/gi, "Pure");
+      if (data.seo.title.includes("Premium Ayurvedic Remedies") || data.seo.title.includes("Himalayan Shilajit")) {
+        data.seo.title = "Pure Ayur Herbs | 100% Certified Ayurvedic Formulations - Virja, Madhunashi & Fat Burner";
+      }
+    }
+    if (typeof data.seo.metaDesc === "string") {
+      data.seo.metaDesc = data.seo.metaDesc.replace(/Pyur/gi, "Pure");
+      if (data.seo.metaDesc.includes("Dia Free") || data.seo.metaDesc.includes("organic skincare") || data.seo.metaDesc.includes("Shilajit Gold Resin")) {
+        data.seo.metaDesc = "Shop authentic 100% AYUSH Certified Virja Powder & Gold Majun for Men's Stamina, Madhunashi Sugar Management, Fat Burner Tonic, and Perfect 36 Cream. Free Priority Delivery across India.";
+      }
+    }
+  }
+
+  if (!data.settings || typeof data.settings !== "object") {
+    data.settings = {
+      storeName: "Pure Ayur Herbs Store",
+      companyLegalName: "Pure Ayur Herbs Private Limited",
+      registeredAddress: "12, Botanical Enclave, Sector 62, Noida, UP - 201301",
+      gstin: "09AAPCP8765A1Z5",
+      socialLinks: {
+        instagram: "https://instagram.com",
+        facebook: "https://facebook.com",
+        youtube: "https://youtube.com",
+        twitter: "https://twitter.com",
+        linkedin: "",
+      },
+      supportEmail: "support@pureayurherbs.com",
+      whatsappNumber: "",
+      whatsappMessage: "नमस्ते! मुझे आपकी वेबसाइट से ऑर्डर करने में मदद चाहिए।",
+      codOtpEnabled: true,
+      prepaidDiscount: 5,
+      taxRate: 18,
+      shipping: { freeThreshold: 999, baseRate: 49, partners: [] },
+      email: { senderName: "", smtpHost: "" },
+      notifications: { orderPlacedSms: true, abandonedCartReminder: true },
+      adminUsers: [
+        { email: "pureayurherbs@gmail.com", role: "Super Admin" },
+        { email: "pyuradmin", role: "Administrator" }
+      ],
+      phonepe: {
+        merchantId: "PGBARCHUPGTEST",
+        saltKey: "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399",
+        saltIndex: "1",
+        env: "sandbox",
+        enabled: true
+      },
+      activeLogisticsPartner: "nimbuspost",
+      shiprocket: {
+        enabled: true,
+        email: "imranshah244830@gmail.com",
+        password: "@16*APnSzf$&O9oZi#AT2kVISPTvRrqi",
+        pickupLocation: "PURE AYUR HERBS",
+      },
+      nimbuspost: {
+        enabled: true,
+        apiKey: process.env.NIMBUSPOST_API_KEY || "npk_aa1f06c9aebdfbe5",
+        apiSecret: process.env.NIMBUSPOST_API_SECRET || "X7XeU-4-4Y3B_GznPoKOtCCcEWqi_aC8",
+        warehouseId: process.env.NIMBUSPOST_WAREHOUSE_ID || "3f262abb-df43-4ec8-aec2-0ce27ecf57ca",
+      }
+    };
+  } else {
+    if (!data.settings.companyLegalName) data.settings.companyLegalName = "Pure Ayur Herbs Private Limited";
+    if (!data.settings.registeredAddress) data.settings.registeredAddress = "12, Botanical Enclave, Sector 62, Noida, UP - 201301";
+    if (!data.settings.gstin) data.settings.gstin = "09AAPCP8765A1Z5";
+    if (!data.settings.socialLinks || typeof data.settings.socialLinks !== "object") {
+      data.settings.socialLinks = {
+        instagram: "https://instagram.com",
+        facebook: "https://facebook.com",
+        youtube: "https://youtube.com",
+        twitter: "https://twitter.com",
+        linkedin: "",
+      };
+    }
+    if (!data.settings.activeLogisticsPartner) {
+      data.settings.activeLogisticsPartner = (process.env.ACTIVE_LOGISTICS_PARTNER as any) || "nimbuspost";
+    }
+    if (!data.settings.shiprocket || typeof data.settings.shiprocket !== "object") {
+      data.settings.shiprocket = {
+        enabled: true,
+        email: "imranshah244830@gmail.com",
+        password: "@16*APnSzf$&O9oZi#AT2kVISPTvRrqi",
+        pickupLocation: "PURE AYUR HERBS",
+      };
+    } else {
+      if (data.settings.shiprocket.enabled === undefined) data.settings.shiprocket.enabled = true;
+      if (!data.settings.shiprocket.email) data.settings.shiprocket.email = "imranshah244830@gmail.com";
+      if (!data.settings.shiprocket.password) data.settings.shiprocket.password = "@16*APnSzf$&O9oZi#AT2kVISPTvRrqi";
+      if (!data.settings.shiprocket.pickupLocation) data.settings.shiprocket.pickupLocation = "PURE AYUR HERBS";
+    }
+
+    if (!data.settings.nimbuspost || typeof data.settings.nimbuspost !== "object") {
+      data.settings.nimbuspost = {
+        enabled: true,
+        apiKey: process.env.NIMBUSPOST_API_KEY || "npk_aa1f06c9aebdfbe5",
+        apiSecret: process.env.NIMBUSPOST_API_SECRET || "X7XeU-4-4Y3B_GznPoKOtCCcEWqi_aC8",
+        warehouseId: process.env.NIMBUSPOST_WAREHOUSE_ID || "3f262abb-df43-4ec8-aec2-0ce27ecf57ca",
+      };
+    } else {
+      if (data.settings.nimbuspost.enabled === undefined) data.settings.nimbuspost.enabled = true;
+      if (!data.settings.nimbuspost.apiKey) {
+        data.settings.nimbuspost.apiKey = process.env.NIMBUSPOST_API_KEY || "npk_aa1f06c9aebdfbe5";
+      }
+      if (!data.settings.nimbuspost.apiSecret) {
+        data.settings.nimbuspost.apiSecret = process.env.NIMBUSPOST_API_SECRET || "X7XeU-4-4Y3B_GznPoKOtCCcEWqi_aC8";
+      }
+      if (!data.settings.nimbuspost.warehouseId) {
+        data.settings.nimbuspost.warehouseId = process.env.NIMBUSPOST_WAREHOUSE_ID || "3f262abb-df43-4ec8-aec2-0ce27ecf57ca";
+      }
+    }
+
+    if (!data.settings.coinsSettings || typeof data.settings.coinsSettings !== "object") {
+      data.settings.coinsSettings = {
+        enabled: true,
+        coinsPerRupee: 10,
+        maxRedemptionPercent: 20,
+        minCoinsToRedeem: 10,
+        welcomeBonus: 100,
+        orderRewardPercent: 5,
+      };
+    } else {
+      if (data.settings.coinsSettings.enabled === undefined) data.settings.coinsSettings.enabled = true;
+      if (typeof data.settings.coinsSettings.coinsPerRupee !== "number" || data.settings.coinsSettings.coinsPerRupee <= 0) {
+        data.settings.coinsSettings.coinsPerRupee = 10;
+      }
+      if (typeof data.settings.coinsSettings.maxRedemptionPercent !== "number") {
+        data.settings.coinsSettings.maxRedemptionPercent = 20;
+      }
+      if (typeof data.settings.coinsSettings.minCoinsToRedeem !== "number") {
+        data.settings.coinsSettings.minCoinsToRedeem = 10;
+      }
+      if (typeof data.settings.coinsSettings.welcomeBonus !== "number") {
+        data.settings.coinsSettings.welcomeBonus = 100;
+      }
+      if (typeof data.settings.coinsSettings.orderRewardPercent !== "number") {
+        data.settings.coinsSettings.orderRewardPercent = 5;
+      }
+    }
+  }
+
+  return data as DBData;
+}
+
+// Read from local db.json file (< 1ms)
+function readLocalDB(): DBData {
+  const tmpPath = "/tmp/pyur_db.json";
+  const standardPath = path.join(process.cwd(), "src/lib/db.json");
+
+  try {
+    let filePath = standardPath;
+    if (fs.existsSync(tmpPath) && fs.existsSync(standardPath)) {
+      const tmpMtime = fs.statSync(tmpPath).mtimeMs;
+      const stdMtime = fs.statSync(standardPath).mtimeMs;
+      filePath = stdMtime >= tmpMtime ? standardPath : tmpPath;
+    } else if (fs.existsSync(tmpPath)) {
+      filePath = tmpPath;
+    }
+
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const cleanData = JSON.parse(content);
+      return sanitizeDBData(cleanData);
+    }
+  } catch (e) {
+    console.error("Error reading local db.json:", e);
+  }
+  return sanitizeDBData({});
+}
+
+// Write to local db.json file (< 1ms)
+function writeLocalDB(data: DBData): boolean {
+  const tmpPath = "/tmp/pyur_db.json";
+  const standardPath = path.join(process.cwd(), "src/lib/db.json");
+  const jsonStr = JSON.stringify(data, null, 2);
+
+  let written = false;
+
+  try {
+    fs.writeFileSync(standardPath, jsonStr, "utf-8");
+    written = true;
+  } catch {}
+
+  try {
+    fs.writeFileSync(tmpPath, jsonStr, "utf-8");
+    written = true;
+  } catch {}
+
+  return written;
+}
+
+export async function readDB(bypassCache = false): Promise<DBData> {
+  // 1. Instant return from in-memory cache if valid (< 0.01ms)
+  if (!bypassCache && dbMemoryCache && Date.now() - dbMemoryCache.timestamp < CACHE_TTL_MS) {
+    return dbMemoryCache.data;
+  }
+
+  // If MongoDB URI is not set, load local file
+  if (!uri) {
+    const data = readLocalDB();
+    dbMemoryCache = { data, timestamp: Date.now() };
+    return data;
+  }
+
+  try {
+    const activeClient = await getMongoClient();
+    const db = activeClient.db(dbName);
+    const document = await db.collection("store_data").findOne({ _id: "main" as any });
+
+    if (!document) {
+      const defaultData = readLocalDB();
+      dbMemoryCache = { data: defaultData, timestamp: Date.now() };
+      return defaultData;
+    }
+
+    const { _id, ...cleanData } = document as any;
+    const sanitized = sanitizeDBData(cleanData);
+
+    // Safeguard: Never allow an empty products array from a fresh or stale DB to wipe out existing in-memory products
+    if (sanitized.products.length === 0 && dbMemoryCache?.data?.products && dbMemoryCache.data.products.length > 0) {
+      sanitized.products = dbMemoryCache.data.products;
+    }
+
+    // Auto-migrate old SEO descriptions in MongoDB
+    if (cleanData.seo?.metaDesc?.includes("Dia Free") || cleanData.seo?.title?.includes("Premium Ayurvedic Remedies")) {
+      void db.collection("store_data").updateOne(
+        { _id: "main" as any },
+        { $set: { "seo.metaDesc": sanitized.seo.metaDesc, "seo.title": sanitized.seo.title } }
+      ).catch(() => {});
+    }
+
+    // Auto-migrate old legacy FAQs in MongoDB
+    const needsFaqMigration =
+      !Array.isArray(cleanData.faqs) ||
+      cleanData.faqs.length === 0 ||
+      cleanData.faqs.some((f: any) => isLegacyFaq(f));
+
+    if (needsFaqMigration) {
+      void db.collection("store_data").updateOne(
+        { _id: "main" as any },
+        { $set: { faqs: sanitized.faqs } }
+      ).catch((err) => console.error("[MongoDB FAQ Migration Error]:", err));
+    }
+
+    // Auto-migrate old Base64 images in MongoDB to lightweight CDN URLs (shrinks MongoDB document from 1.43 MB to ~60 KB)
+    const hasBase64Images =
+      (Array.isArray(cleanData.products) && cleanData.products.some((p: any) => typeof p.image === "string" && p.image.startsWith("data:"))) ||
+      (Array.isArray(cleanData.blogs) && cleanData.blogs.some((b: any) => typeof b.image === "string" && b.image.startsWith("data:"))) ||
+      (Array.isArray(cleanData.content?.heroSlides) && cleanData.content.heroSlides.some((s: any) => typeof s.image === "string" && s.image.startsWith("data:"))) ||
+      (typeof cleanData.content?.consultationBanner?.doctorImage === "string" && cleanData.content.consultationBanner.doctorImage.startsWith("data:"));
+
+    if (hasBase64Images) {
+      void db.collection("store_data").updateOne(
+        { _id: "main" as any },
+        {
+          $set: {
+            products: sanitized.products,
+            blogs: sanitized.blogs,
+            "content.heroSlides": sanitized.content.heroSlides,
+            "content.consultationBanner": sanitized.content.consultationBanner,
+          },
+        }
+      ).catch((err) => console.error("[MongoDB Base64 Migration Error]:", err));
+    }
+
+    dbMemoryCache = { data: sanitized, timestamp: Date.now() };
+    writeLocalDB(sanitized);
+    return sanitized;
+  } catch (error) {
+    console.error("[MongoDB Read Error]:", error);
+    if (dbMemoryCache?.data && dbMemoryCache.data.products && dbMemoryCache.data.products.length > 0) {
+      return dbMemoryCache.data;
+    }
+    const localData = readLocalDB();
+    dbMemoryCache = { data: localData, timestamp: Date.now() };
+    return localData;
+  }
+}
+
+export async function writeDB(data: DBData): Promise<boolean> {
+  // 1. Always write to memory cache and local filesystem immediately with clean clone
+  try {
+    dbMemoryCache = { data: JSON.parse(JSON.stringify(data)), timestamp: Date.now() };
+  } catch {
+    dbMemoryCache = { data, timestamp: Date.now() };
+  }
+  writeLocalDB(data);
+
+  if (!uri) {
+    return true;
+  }
+
+  // 2. Persist to MongoDB with full write guarantee
+  try {
+    const activeClient = await getMongoClient();
+    const db = activeClient.db(dbName);
+
+    const dataToSave = { ...data };
+    delete (dataToSave as any)._id;
+
+    const result = await db.collection("store_data").replaceOne(
+      { _id: "main" as any },
+      dataToSave,
+      { upsert: true }
+    );
+    return result.acknowledged !== false;
+  } catch (error) {
+    console.error("[MongoDB Write Error]:", error);
+    return false;
+  }
+}
+
+export async function deleteOrderFromDB(orderId: string): Promise<boolean> {
+  const cleanId = String(orderId || "").trim();
+  if (!cleanId) return false;
+
+  // 1. Update in-memory cache immediately if present
+  if (dbMemoryCache?.data && Array.isArray(dbMemoryCache.data.orders)) {
+    dbMemoryCache.data.orders = dbMemoryCache.data.orders.filter(
+      (o: any) => String(o?.id || "").trim() !== cleanId
+    );
+    dbMemoryCache.timestamp = Date.now();
+    writeLocalDB(dbMemoryCache.data);
+  } else {
+    const local = readLocalDB();
+    if (Array.isArray(local.orders)) {
+      local.orders = local.orders.filter((o: any) => String(o?.id || "").trim() !== cleanId);
+      writeLocalDB(local);
+    }
+  }
+
+  if (!uri) {
+    return true;
+  }
+
+  // 2. Atomically remove order from MongoDB using $pull so concurrent deletes never race
+  try {
+    const activeClient = await getMongoClient();
+    const db = activeClient.db(dbName);
+    const result = await db.collection("store_data").updateOne(
+      { _id: "main" as any },
+      { $pull: { orders: { id: cleanId } } as any }
+    );
+    invalidateDBCache();
+    return result.acknowledged !== false;
+  } catch (error) {
+    console.error("[MongoDB Delete Order Error]:", error);
+    return false;
+  }
+}
+
+

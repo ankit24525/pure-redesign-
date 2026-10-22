@@ -1,0 +1,40 @@
+import { NextResponse } from "next/server";
+import { readDB, writeDB } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const db = await readDB();
+  return NextResponse.json({ settings: db.settings });
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const db = await readDB();
+
+    db.settings = {
+      ...db.settings,
+      storeName: body.storeName || db.settings.storeName,
+      supportEmail: body.supportEmail || db.settings.supportEmail,
+      whatsappNumber: body.whatsappNumber !== undefined ? body.whatsappNumber : db.settings.whatsappNumber,
+      whatsappMessage: body.whatsappMessage !== undefined ? body.whatsappMessage : db.settings.whatsappMessage,
+      codOtpEnabled: typeof body.codOtpEnabled === "boolean" ? body.codOtpEnabled : db.settings.codOtpEnabled,
+      prepaidDiscount: typeof body.prepaidDiscount === "number" ? body.prepaidDiscount : db.settings.prepaidDiscount,
+      taxRate: typeof body.taxRate === "number" ? body.taxRate : db.settings.taxRate,
+      codAbuseThreshold: typeof body.codAbuseThreshold === "number" ? body.codAbuseThreshold : (db.settings.codAbuseThreshold ?? 2),
+      maxMonthlyCancellations: typeof body.maxMonthlyCancellations === "number" ? body.maxMonthlyCancellations : (db.settings.maxMonthlyCancellations ?? 3),
+      blockedCodPhones: Array.isArray(body.blockedCodPhones) ? body.blockedCodPhones : (db.settings.blockedCodPhones || []),
+      coinsSettings: body.coinsSettings !== undefined ? body.coinsSettings : db.settings.coinsSettings,
+    };
+
+    const success = await writeDB(db);
+    if (!success) {
+      return NextResponse.json({ success: false, error: "Database write failed." }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, settings: db.settings });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 });
+  }
+}

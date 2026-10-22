@@ -1,0 +1,270 @@
+export type ProductVariant = {
+  id: string;
+  name: string;
+  type?: string;
+  value?: string;
+  price: number;
+  mrp?: number;
+  compareAt?: number;
+  discount?: string;
+  badge?: string;
+  image?: string;
+  inStock?: boolean;
+};
+
+export type Product = {
+  id: string;
+  name: string;
+  slug: string;
+  concern: string;
+  price: number;
+  compareAt: number;
+  rating: number;
+  reviews: number;
+  badge: string;
+  image: string;
+  images?: string[];
+  ingredients: string[];
+  description: string;
+  coinsEarned: number;
+  showCoins?: boolean;
+  deliveryDays: string;
+  inStock: boolean;
+  variants?: ProductVariant[];
+};
+
+export type Concern = {
+  id: string;
+  name: string;
+  icon: string;
+  image: string;
+};
+
+export const concerns: Concern[] = [
+  {
+    id: "sugar",
+    name: "Sugar Management",
+    icon: "🩸",
+    image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "fitness",
+    name: "Gym & Fitness",
+    icon: "💪",
+    image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "energy",
+    name: "Energy & Vitality",
+    icon: "⚡",
+    image: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "heart",
+    name: "Heart Health",
+    icon: "🫀",
+    image: "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "liver",
+    name: "Liver Care",
+    icon: "🌿",
+    image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "daily",
+    name: "Daily Ayurveda",
+    icon: "🍵",
+    image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "skin",
+    name: "Skin & Hair",
+    icon: "✨",
+    image: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=120&q=80",
+  },
+  {
+    id: "women",
+    name: "Women's Health",
+    icon: "🌸",
+    image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=120&q=80",
+  },
+];
+
+export const products: Product[] = [
+  {
+    id: "prod_1788947560528",
+    name: "VIRJA POWDER",
+    slug: "virja-powder",
+    concern: "Energy & Vitality",
+    price: 1199,
+    compareAt: 1499,
+    rating: 5.0,
+    reviews: 0,
+    badge: "BESTSELLER",
+    image: "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381368/pure_ayur_herbs/products/hmlzvpwldh0zgunukmxk.jpg",
+    ingredients: ["Pure Ayurvedic Rasayana", "Shuddha Shilajit", "Ashwagandha", "Safed Musli", "Gokshura", "Kaunch Beej"],
+    description: "Pure Ayur Herbs बिरजा पाउडर (Virja Powder), विशेष रूप से पुरुषों की प्राकृतिक शक्ति, स्टैमिना और ऊर्जा को बढ़ाने के लिए तैयार किया गया एक प्रीमियम आयुर्वेदिक फॉर्मूला है। 100% पारंपरिक, सुरक्षित व जीएमपी प्रमाणित।",
+    coinsEarned: 60,
+    showCoins: true,
+    deliveryDays: "3 - 5 Days",
+    inStock: true,
+  },
+  {
+    id: "prod_1789129223995",
+    name: "VIRJA GOLD MAJUN",
+    slug: "virja-gold-majun",
+    concern: "Energy & Vitality",
+    price: 449,
+    compareAt: 499,
+    rating: 5.0,
+    reviews: 0,
+    badge: "POPULAR",
+    image: "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381369/pure_ayur_herbs/products/x2yhpnwfcsesqdjjmzll.jpg",
+    ingredients: ["Gold Bhasma Blend", "Kesar", "Ashwagandha", "Safed Musli", "Akarkara", "Herbal Extracts"],
+    description: "पारंपरिक आयुर्वेदिक माजून फॉर्मूला जो पुरुषों की वाइटैलिटी, पावर और स्टैमिना को प्राकृतिक रूप से सपोर्ट करता है। रोजमर्रा की थकान और अंदरूनी कमजोरी को दूर कर नई स्फूर्ति देता है।",
+    coinsEarned: 22,
+    showCoins: true,
+    deliveryDays: "3 - 5 Days",
+    inStock: true,
+  },
+  {
+    id: "prod_1788511819071",
+    name: "MADHUNASHI POWDER",
+    slug: "madhunashi-powder",
+    concern: "Sugar Management",
+    price: 1487,
+    compareAt: 2199,
+    rating: 5.0,
+    reviews: 1,
+    badge: "AYUSH CERTIFIED",
+    image: "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381364/pure_ayur_herbs/products/kleuwprcuiyj1duvlojh.jpg",
+    ingredients: ["Gudmar (Gymnema Sylvestre)", "Karela (Bitter Gourd)", "Jamun Seed", "Vijaysar", "Methi"],
+    description: "Madhunashi 100% natural Ayurvedic blend of Gudmar, Karela, and Jamun crafted to support healthy blood sugar levels and provide antioxidant support. 200g, GMP certified, gluten-free.",
+    coinsEarned: 74,
+    showCoins: true,
+    deliveryDays: "3 - 5 Days",
+    inStock: true,
+  },
+  {
+    id: "prod_1788511912600",
+    name: "MADHUNASHI SYP",
+    slug: "madhunashi-syp",
+    concern: "Sugar Management",
+    price: 410,
+    compareAt: 499,
+    rating: 5.0,
+    reviews: 0,
+    badge: "POPULAR",
+    image: "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381365/pure_ayur_herbs/products/ospkjprkxo1rzsb6ghmy.jpg",
+    ingredients: ["Karela", "Jamun", "Gudmar", "Nimba", "Giloy Extracts"],
+    description: "Madhunashi Syrup is a traditional Ayurvedic tonic formulated to support natural blood sugar balance. 100% vegetarian, GMP certified, and free from harmful additives.",
+    coinsEarned: 21,
+    showCoins: true,
+    deliveryDays: "3 - 5 Days",
+    inStock: true,
+  },
+  {
+    id: "prod_1788511960374",
+    name: "FAT BURNER",
+    slug: "fat-burner",
+    concern: "Gym & Fitness",
+    price: 499,
+    compareAt: 599,
+    rating: 5.0,
+    reviews: 0,
+    badge: "TOP RATED",
+    image: "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381366/pure_ayur_herbs/products/xemjcovn6mbh6edriszp.jpg",
+    ingredients: ["Wild Amla", "Curry Leaves", "Ginger", "Garcinia Cambogia", "Harad", "Baheda"],
+    description: "Fat Burn Juice – an Ayurvedic slim tonic with Amla, Curry Leaves, and Ginger to naturally support metabolism, detox, energy and weight management. 500ml, GMP certified.",
+    coinsEarned: 25,
+    showCoins: true,
+    deliveryDays: "3 - 5 Days",
+    inStock: true,
+  },
+  {
+    id: "prod_1788512010828",
+    name: "PERFECT 36 CREAM",
+    slug: "perfect-36-cream",
+    concern: "Women's Health",
+    price: 598,
+    compareAt: 799,
+    rating: 5.0,
+    reviews: 0,
+    badge: "SAFE & GENTLE",
+    image: "https://res.cloudinary.com/dwadcfj3b/image/upload/v1791381367/pure_ayur_herbs/products/aux22j4iqo4xus6bbja4.jpg",
+    ingredients: ["Shatavari", "Ashwagandha", "Gambhari", "Jamun Botanicals"],
+    description: "Natural herbal toning cream formulated with time-tested Ayurvedic botanicals like Shatavari, Ashwagandha, and Gambhari. Supports skin elasticity and firmness. 100ml.",
+    coinsEarned: 35,
+    showCoins: true,
+    deliveryDays: "3 - 5 Days",
+    inStock: true,
+  },
+];
+
+export const headerSearchSuggestions = [
+  "Virja Powder",
+  "Madhunashi",
+  "Fat Burner",
+  "Virja Gold Majun",
+  "Perfect 36 Cream",
+  "Sugar Management",
+  "Men's Stamina",
+  "Weight Management",
+];
+
+export const menuLinks = [
+  { label: "Shop All Products", href: "/#shop" },
+  { label: "Select Concern", href: "/#concerns" },
+  { label: "Blog", href: "/blog" },
+  { label: "Media Hub", href: "/media" },
+  { label: "Customer Reviews", href: "/#reviews" },
+  { label: "Why Pure Ayur Herbs", href: "/#trust" },
+];
+
+export const heroSlides = [
+  {
+    id: 0,
+    title: "Himalayan Ayurvedic Goodness & Vitality",
+    subtitle: "AUTHENTIC BOTANICAL WELLNESS CRAFTED FROM HIMALAYAN HERBS",
+    offer: "Special Launch Offer",
+    ctaText: "SHOP NOW",
+    href: "/products",
+    badge: "100% Himalayan Herbs",
+    image: "/brand/hero-taitva-1200x800.jpg",
+    bgColor: "#023915",
+  },
+  {
+    id: 1,
+    title: "100% Ayurvedic Virja Powder & Gold Majun",
+    subtitle: "AUTHENTIC AYURVEDA FOR PEAK MEN'S STAMINA & ENERGY",
+    offer: "GET EXTRA 10% OFF WITH CODE: PURE10",
+    ctaText: "SHOP VIRJA REMEDIES",
+    href: "/products/virja-powder",
+    badge: "100% Pure Sourced",
+    image: "/brand/hero-taitva-1200x800.jpg",
+    bgColor: "#023915",
+  },
+  {
+    id: 2,
+    title: "Madhunashi Sugar Management Care",
+    subtitle: "CLINICALLY BACKED BOTANICALS WITH GUDMAR, KARELA & JAMUN",
+    offer: "BUY POWDER & SYRUP COMBO",
+    ctaText: "EXPLORE MADHUNASHI",
+    href: "/products/madhunashi-powder",
+    badge: "GMP Certified",
+    image: "/brand/hero-taitva-1200x800.jpg",
+    bgColor: "#023915",
+  },
+  {
+    id: 3,
+    title: "Ayurvedic Fat Burner Slim Tonic",
+    subtitle: "NATURAL METABOLISM, DETOX & WEIGHT MANAGEMENT SUPPORT",
+    offer: "EARN 2X PURE COINS ON EVERY BOTTLE",
+    ctaText: "UNLOCK FAT BURNER",
+    href: "/products/fat-burner",
+    badge: "100% Ayurvedic",
+    image: "/brand/hero-taitva-1200x800.jpg",
+    bgColor: "#023915",
+  },
+];

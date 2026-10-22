@@ -1,0 +1,78 @@
+import { MetadataRoute } from "next";
+import { readDB } from "@/lib/db";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const baseUrl = "https://www.purreayurherbs.com";
+  const now = new Date();
+
+  // Core static pages
+  const routes: MetadataRoute.Sitemap = [
+    { url: `${baseUrl}`, lastModified: now, changeFrequency: "daily", priority: 1.0 },
+    { url: `${baseUrl}/about-us`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${baseUrl}/blog`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${baseUrl}/contact-us`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${baseUrl}/shipping-policy`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${baseUrl}/return-policy`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${baseUrl}/privacy-policy`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${baseUrl}/terms-of-service`, lastModified: now, changeFrequency: "monthly", priority: 0.4 },
+    // Core solution / concern category hubs
+    { url: `${baseUrl}/solution/sugar-management`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/gym-and-fitness`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/energy`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/skin-and-hair`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/heart-health`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/liver-care`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/daily-ayurveda`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+    { url: `${baseUrl}/solution/womens-health`, lastModified: now, changeFrequency: "weekly", priority: 0.85 },
+  ];
+
+  try {
+    const db = await readDB();
+
+    // Dynamic products
+    if (Array.isArray(db.products)) {
+      db.products.forEach((product: any) => {
+        if (product.slug) {
+          const productImages = [
+            product.image,
+            ...(Array.isArray(product.images) ? product.images : []),
+            ...(Array.isArray(product.gallery) ? product.gallery : []),
+          ].filter((img: string) => typeof img === "string" && img.startsWith("http"));
+
+          routes.push({
+            url: `${baseUrl}/products/${encodeURIComponent(product.slug)}`,
+            lastModified: now,
+            changeFrequency: "weekly",
+            priority: 0.9,
+            images: productImages.length > 0 ? Array.from(new Set(productImages)) : undefined,
+          });
+        }
+      });
+    }
+
+    // Dynamic blogs
+    if (Array.isArray(db.blogs)) {
+      db.blogs.forEach((blog: any) => {
+        const blogId = blog.id || blog.title?.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
+        if (blogId && blog.status === "Published") {
+          const blogImages =
+            blog.image && typeof blog.image === "string" && blog.image.startsWith("http")
+              ? [blog.image]
+              : undefined;
+
+          routes.push({
+            url: `${baseUrl}/blog/${encodeURIComponent(blogId)}`,
+            lastModified: now,
+            changeFrequency: "weekly",
+            priority: 0.7,
+            images: blogImages,
+          });
+        }
+      });
+    }
+  } catch (error) {
+    console.error("Sitemap generation error:", error);
+  }
+
+  return routes;
+}

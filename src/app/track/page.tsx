@@ -1,0 +1,1137 @@
+"use client";
+
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import {
+  ArrowLeft,
+  Package,
+  Truck,
+  Calendar,
+  MapPin,
+  CreditCard,
+  AlertCircle,
+  CheckCircle2,
+  HelpCircle,
+  RefreshCw,
+  User,
+  ExternalLink,
+  X,
+} from "lucide-react";
+import SiteHeader from "@/components/SiteHeader";
+import SiteFooter from "@/components/SiteFooter";
+import AnnouncementBar from "@/components/AnnouncementBar";
+import { products, Product } from "@/lib/store";
+import { getStorefrontData } from "@/lib/storefront-client";
+
+const parseOrderItems = (itemsStr: any) => {
+  if (!itemsStr) return [];
+  if (Array.isArray(itemsStr)) return itemsStr;
+  if (typeof itemsStr !== "string") return [];
+  const parts = itemsStr.split(", ");
+  return parts.map((part) => {
+    const lastXIndex = part.lastIndexOf(" x");
+    if (lastXIndex === -1) {
+      return { name: part.trim(), quantity: 1 };
+    }
+    const name = part.slice(0, lastXIndex).trim();
+    const qtyStr = part.slice(lastXIndex + 2).trim();
+    const quantity = parseInt(qtyStr, 10) || 1;
+    return { name, quantity };
+  });
+};
+
+function TrackOrderContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const urlOrderId = searchParams.get("orderId") || "";
+  const urlContact = searchParams.get("contact") || "";
+
+  const [orderIdInput, setOrderIdInput] = useState(urlOrderId);
+  const [contactInput, setContactInput] = useState(urlContact);
+  
+  const [order, setOrder] = useState<any>(null);
+  const [authorized, setAuthorized] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [authFormContact, setAuthFormContact] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Order Cancellation States (Amazon & Flipkart System)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [doorstepModalOpen, setDoorstepModalOpen] = useState(false);
+  const [cancelContactInput, setCancelContactInput] = useState("");
+  const [cancelReason, setCancelReason] = useState("Ordered by mistake");
+  const [cancelComments, setCancelComments] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSuccessMsg, setCancelSuccessMsg] = useState<string | null>(null);
+
+  const [whatsappNumber, setWhatsappNumber] = useState("917247824101");
+
+  useEffect(() => {
+    getStorefrontData()
+      .then((data) => {
+        if (data && data.settings && data.settings.whatsappNumber) {
+          setWhatsappNumber(data.settings.whatsappNumber);
+        }
+      })
+      .catch((e) => console.error("Error loading settings:", e));
+  }, []);
+
+  let cleanNumber = whatsappNumber.replace(/\D/g, "");
+  if (cleanNumber.length === 10) {
+    cleanNumber = "91" + cleanNumber;
+  }
+
+  const fetchOrder = async (id: string, contactVal?: string) => {
+    if (!id.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/track?orderId=${encodeURIComponent(id.trim())}&contact=${encodeURIComponent(contactVal || "")}`, { cache: "no-store" });
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { success: false, error: "Temporary server error loading order. Please try again in a moment." };
+      }
+      if (res.ok && data.success) {
+        setOrder(data.order);
+        setAuthorized(data.authorized);
+      } else {
+        setOrder(null);
+        setError(data.error || "Order not found. Please verify your Order ID.");
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (urlOrderId) {
+      void fetchOrder(urlOrderId, urlContact);
+    }
+  }, [urlOrderId, urlContact]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderIdInput.trim()) return;
+    
+    // Update search query parameters
+    const params = new URLSearchParams();
+    params.set("orderId", orderIdInput.trim());
+    if (contactInput.trim()) {
+      params.set("contact", contactInput.trim());
+    }
+    router.push(`/track?${params.toString()}`);
+  };
+
+  const handleUnmaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authFormContact.trim() || !order) return;
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch(`/api/track?orderId=${encodeURIComponent(order.id)}&contact=${encodeURIComponent(authFormContact.trim())}`, { cache: "no-store" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.authorized) {
+          setOrder(data.order);
+          setAuthorized(true);
+          // Update URL params silently
+          const params = new URLSearchParams(window.location.search);
+          params.set("contact", authFormContact.trim());
+          router.replace(`/track?${params.toString()}`);
+        } else {
+          setAuthError("Email or mobile number does not match this Order ID.");
+        }
+      } else {
+        setAuthError(data.error || "Verification failed.");
+      }
+    } catch {
+      setAuthError("Connection error. Try again.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Watch for ?action=cancel in URL and auto-open appropriate modal
+  useEffect(() => {
+    if (searchParams.get("action") === "cancel" && order) {
+      const st = `${order.status || ""} ${order.nimbusStatus || ""} ${order.shiprocketStatus || ""}`.toLowerCase();
+      if (
+        st.includes("shipped") ||
+        st.includes("dispatch") ||
+        st.includes("transit") ||
+        st.includes("out for delivery") ||
+        st.includes("ofd") ||
+        st.includes("picked up")
+      ) {
+        setDoorstepModalOpen(true);
+      } else if (!st.includes("cancel") && !st.includes("delivered")) {
+        setCancelModalOpen(true);
+      }
+    }
+  }, [searchParams, order]);
+
+  const handleCancelOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+
+    const effectiveContact = (
+      cancelContactInput.trim() ||
+      (!order.phone?.includes("*") ? order.phone : "") ||
+      (!order.email?.includes("*") ? order.email : "") ||
+      contactInput.trim() ||
+      authFormContact.trim()
+    ).trim();
+
+    if (!effectiveContact) {
+      setCancelError("Please enter the 10-digit mobile number or email address used to place this order.");
+      return;
+    }
+
+    setCancelLoading(true);
+    setCancelError(null);
+    try {
+      const res = await fetch("/api/orders/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          contact: effectiveContact,
+          reason: cancelReason,
+          comments: cancelComments,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setOrder(data.order);
+        setAuthorized(true);
+        setCancelModalOpen(false);
+        setCancelSuccessMsg(data.message || "Your order has been cancelled successfully.");
+      } else {
+        if (data.eligibleForDoorstepRefusal) {
+          setCancelModalOpen(false);
+          setDoorstepModalOpen(true);
+        } else {
+          setCancelError(data.error || "Failed to cancel order. Please try again.");
+        }
+      }
+    } catch {
+      setCancelError("Network error while submitting cancellation. Please try again.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  // Determine timeline progress steps based on live status & real Shiprocket scans
+  const getTrackingSteps = (status: string, orderDateStr: string, trackingId?: string, liveTrackingData?: any, shiprocketStatus?: string) => {
+    const baseDate = orderDateStr ? new Date(orderDateStr) : new Date();
+    
+    const formatDate = (date: Date) => {
+      if (!date || isNaN(date.getTime())) return "";
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      
+      const dayName = days[date.getDay()] || "Day";
+      const dayVal = date.getDate();
+      const monthName = months[date.getMonth()] || "Month";
+      const yearName = isNaN(date.getFullYear()) ? "YY" : date.getFullYear().toString().slice(-2);
+      
+      let suffix = "th";
+      if (dayVal === 1 || dayVal === 21 || dayVal === 31) suffix = "st";
+      else if (dayVal === 2 || dayVal === 22) suffix = "nd";
+      else if (dayVal === 3 || dayVal === 23) suffix = "rd";
+      
+      return `${dayName}, ${dayVal}${suffix} ${monthName} '${yearName}`;
+    };
+
+    const courierInfo = liveTrackingData?.tracking_data?.shipment_track?.[0];
+    const rawCourier = courierInfo?.courier_name;
+    const realCourierName = rawCourier && rawCourier !== "0" && rawCourier !== "null" && rawCourier !== "Shiprocket Courier Partner"
+      ? rawCourier
+      : "";
+    const awbCode = courierInfo?.awb_code || trackingId || "";
+
+    const rawActivities = liveTrackingData?.tracking_data?.shipment_track_activities ||
+                          liveTrackingData?.tracking_data?.scans ||
+                          liveTrackingData?.scans || [];
+
+    const realScans = Array.isArray(rawActivities) && rawActivities.length > 0
+      ? rawActivities.map((act: any) => ({
+          title: [act.activity || act.status || act.sr_status_label, act.location ? `(${act.location})` : ""].filter(Boolean).join(" "),
+          time: act.date || act.time || act.timestamp || "",
+        }))
+      : [];
+
+    const orderPlacedEvents = [
+      { title: "Your order has been placed on website.", time: formatDate(baseDate) },
+      { title: "Order confirmed by seller.", time: formatDate(baseDate) },
+    ];
+
+    const courierPartnerText = realCourierName
+      ? `Delivery Partner Assigned: ${realCourierName}${awbCode ? " (AWB: " + awbCode + ")" : ""}`
+      : "Delivery Partner: Yet to be assigned";
+
+    const shippedEvents = [
+      {
+        title: courierPartnerText,
+        time: courierInfo?.pickup_date || "",
+      },
+      ...(realScans.length > 0
+        ? realScans
+        : [
+            {
+              title: courierInfo?.current_status
+                ? `Package Status: ${courierInfo.current_status}`
+                : "Awaiting physical parcel pickup at seller warehouse.",
+              time: "",
+            },
+          ]),
+    ];
+
+    const steps = [
+      {
+        label: "Order Confirmed",
+        date: formatDate(baseDate),
+        events: orderPlacedEvents,
+        done: false,
+        active: false,
+      },
+      {
+        label: "Shipped / In Transit",
+        date: courierInfo?.pickup_date || (realScans.length > 0 ? realScans[0].time : ""),
+        events: shippedEvents,
+        done: false,
+        active: false,
+      },
+      {
+        label: "Out For Delivery",
+        date: "",
+        events: [
+          { title: "Your item will be out for delivery once it reaches the destination hub.", time: "" },
+        ],
+        done: false,
+        active: false,
+      },
+      {
+        label: "Delivered",
+        date: courierInfo?.delivered_date || "",
+        events: [
+          { title: "Your package will be delivered to the recipient address.", time: "" },
+        ],
+        done: false,
+        active: false,
+      },
+    ];
+
+    const internalStatus = (status || "").toLowerCase();
+    const srCurrentStatus = (courierInfo?.current_status || "").toUpperCase();
+
+    if (internalStatus === "pending otp" || internalStatus === "pending payment") {
+      steps[0].active = true;
+    } else if (srCurrentStatus.includes("DELIVERED") || internalStatus === "delivered") {
+      steps[0].done = true;
+      steps[1].done = true;
+      steps[2].done = true;
+      steps[3].done = true;
+    } else if (srCurrentStatus.includes("OUT FOR DELIVERY")) {
+      steps[0].done = true;
+      steps[1].done = true;
+      steps[2].done = true;
+      steps[3].active = true;
+    } else if (
+      srCurrentStatus.includes("IN TRANSIT") ||
+      srCurrentStatus.includes("SHIPPED") ||
+      srCurrentStatus.includes("PICKED UP") ||
+      internalStatus === "shipped" ||
+      internalStatus === "in transit"
+    ) {
+      steps[0].done = true;
+      steps[1].done = true;
+      steps[2].active = true;
+    } else if (
+      internalStatus === "processing" ||
+      internalStatus === "verified" ||
+      shiprocketStatus === "Pushed" ||
+      srCurrentStatus.length > 0
+    ) {
+      steps[0].done = true;
+      steps[1].active = true;
+    } else {
+      steps[0].done = true;
+      steps[1].active = true;
+    }
+
+    return steps;
+  };
+
+  const steps = order ? getTrackingSteps(order.status, order.date, order.trackingId, order.liveTracking, order.shiprocketStatus) : [];
+  const activeIndex = steps.findIndex((s) => s.active);
+  const lastDoneIndex = steps.reduce((acc, s, idx) => (s.done ? idx : acc), -1);
+  const currentProgressIdx = activeIndex !== -1 ? activeIndex : lastDoneIndex;
+
+  // Calculate percentage for progress bar
+  const getProgressPercentage = () => {
+    if (order?.status === "Delivered") return 100;
+    if (order?.status === "Cancelled") return 0;
+    if (currentProgressIdx === -1) return 0;
+    return (currentProgressIdx / (steps.length - 1)) * 100;
+  };
+
+  return (
+    <main className="min-h-screen bg-[#f3f4f6] text-[#17231b] flex flex-col">
+      <AnnouncementBar />
+      <SiteHeader
+        cart={[]}
+        onUpdateQuantity={() => {}}
+        onRemoveItem={() => {}}
+        onOpenAppModal={() => {}}
+        onOpenLoginModal={() => {}}
+        onOpenConsultationModal={() => {}}
+      />
+
+      <div className="flex-1 w-full max-w-[1000px] mx-auto px-4 py-8">
+        {/* Back Link */}
+        <Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-[#80a03c] hover:text-[#244f31] mb-6">
+          <ArrowLeft className="size-4" />
+          <span>Back to Home</span>
+        </Link>
+
+        {/* Search Header Bar */}
+        <div className="bg-white border border-[#ddddd9] p-5 rounded-2xl shadow-sm mb-6">
+          <h1 className="text-xl font-black text-[#17231b] mb-2 uppercase tracking-wide">Track Your Package</h1>
+          <p className="text-xs text-[#666666] mb-4">Enter your order identifier to view the real-time package delivery timeline.</p>
+          
+          <form onSubmit={handleSearchSubmit} className="grid gap-3 sm:grid-cols-3">
+            <input
+              type="text"
+              value={orderIdInput}
+              onChange={(e) => setOrderIdInput(e.target.value)}
+              placeholder="Order ID (e.g. PYR-1001)"
+              className="rounded-xl border border-[#ddddd9] px-3.5 py-2.5 text-xs font-semibold outline-none focus:border-[#244f31] w-full"
+              required
+            />
+            <input
+              type="text"
+              value={contactInput}
+              onChange={(e) => setContactInput(e.target.value)}
+              placeholder="Email or Mobile No. (Optional)"
+              className="rounded-xl border border-[#ddddd9] px-3.5 py-2.5 text-xs font-semibold outline-none focus:border-[#244f31] w-full"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-xl bg-[#244f31] text-white font-bold text-xs py-2.5 px-4 shadow-sm hover:bg-[#1d3b24] transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading && <RefreshCw className="size-3.5 animate-spin" />}
+              <span>Track Package</span>
+            </button>
+          </form>
+        </div>
+
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="bg-white border border-[#ddddd9] p-12 rounded-2xl shadow-sm text-center flex flex-col items-center justify-center gap-3">
+            <div className="size-8 animate-spin rounded-full border-3 border-[#244f31] border-t-transparent"></div>
+            <p className="text-xs font-bold text-[#666666]">Querying database records...</p>
+          </div>
+        )}
+
+        {/* Error Alert */}
+        {error && !loading && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-900 p-5 rounded-2xl shadow-sm flex items-start gap-3">
+            <AlertCircle className="size-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-xs font-bold">Could Not Locate Shipment</h4>
+              <p className="text-[11px] font-semibold text-rose-700 mt-1">{error}</p>
+              <p className="text-[10px] text-rose-600/80 mt-1">Please verify the Order ID spelling. E.g. "PYR-1001" or match it with your registered phone number.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Main Tracking Content Card (When order is resolved) */}
+        {order && !loading && (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            
+            {/* Amazon-Style Top Summary Panel */}
+            <div className="bg-white border border-[#ddddd9] rounded-2xl shadow-sm overflow-hidden">
+              <div className="bg-[#f6f6f6] border-b border-[#ddddd9] px-6 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-semibold text-[#666666]">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wider text-neutral-400 font-bold mb-0.5">Order Placed</span>
+                  <span className="text-[#17231b] font-bold">{order.date || "Pending"}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wider text-neutral-400 font-bold mb-0.5">Total Value</span>
+                  <span className="text-[#17231b] font-bold">₹{order.total}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wider text-neutral-400 font-bold mb-0.5">Ship To</span>
+                  <span className="text-[#244f31] font-bold">
+                    {authorized ? order.customerName || order.name : `${order.customerName || "Customer"} (Masked)`}
+                  </span>
+                </div>
+                <div className="text-right md:text-left">
+                  <span className="block text-[10px] uppercase tracking-wider text-neutral-400 font-bold mb-0.5">Order ID</span>
+                  <span className="text-[#17231b] font-bold">{order.id}</span>
+                </div>
+              </div>
+
+              {/* Status Banner */}
+              <div className="p-6">
+                {cancelSuccessMsg && (
+                  <div className="mb-5 bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+                    <CheckCircle2 className="size-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-800">Order Cancelled Successfully</h4>
+                      <p className="text-[11px] text-emerald-700 mt-0.5">{cancelSuccessMsg}</p>
+                      <p className="text-[10px] text-emerald-600/80 mt-1">A confirmation notification with refund instructions has also been sent to your WhatsApp.</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#f0f0eb] mb-6">
+                  <div>
+                    <h2 className="text-lg font-black text-[#17231b]">
+                      {order.status === "Delivered" ? (
+                        <span className="text-emerald-600 flex items-center gap-1.5">
+                          <CheckCircle2 className="size-5 shrink-0" />
+                          <span>Delivered Package</span>
+                        </span>
+                      ) : order.status === "Cancelled" ? (
+                        <span className="text-rose-600 flex items-center gap-1.5">
+                          <AlertCircle className="size-5 shrink-0" />
+                          <span>Cancelled Order</span>
+                        </span>
+                      ) : (
+                        <span>Arriving soon: In Transit</span>
+                      )}
+                    </h2>
+                    {order.status !== "Cancelled" && (
+                      <p className="text-xs text-[#666666] mt-1">
+                        Estimated Delivery: <span className="font-bold text-[#244f31]">Within 2-3 Business Days</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* Cancellation / Doorstep Refusal Actions */}
+                    {(() => {
+                      const st = `${order.status || "Processing"} ${order.nimbusStatus || ""} ${order.shiprocketStatus || ""}`.toLowerCase();
+                      const isCancelled = st.includes("cancel");
+                      const isDelivered = st.includes("delivered");
+                      const liveSt = String(
+                        order.liveTracking?.tracking_data?.shipment_track?.[0]?.current_status || ""
+                      ).toLowerCase();
+                      const isDispatched =
+                        st.includes("shipped") ||
+                        st.includes("dispatch") ||
+                        st.includes("transit") ||
+                        st.includes("out for delivery") ||
+                        st.includes("ofd") ||
+                        st.includes("picked up") ||
+                        liveSt.includes("shipped") ||
+                        liveSt.includes("transit") ||
+                        liveSt.includes("out for delivery");
+
+                      if (isCancelled) return null;
+
+                      if (isDelivered) {
+                        const parsedItems = parseOrderItems(order.items);
+                        const firstItemName = parsedItems[0]?.name || "";
+                        const matched = products.find((p) => p.name.toLowerCase().trim() === firstItemName.toLowerCase().trim());
+                        const targetSlug = matched?.slug || (products[0]?.slug || "ayurvedic-remedies");
+                        const rateUrl = `/products/${targetSlug}?rate=true&orderId=${encodeURIComponent(order.id)}&customerName=${encodeURIComponent(order.customerName || order.customer || '')}&phone=${encodeURIComponent(order.customerPhone || order.phone || '')}#reviews`;
+
+                        return (
+                          <Link
+                            href={rateUrl}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition shadow-xs cursor-pointer"
+                          >
+                            <span>⭐ Rate & Review Remedies</span>
+                          </Link>
+                        );
+                      }
+
+                      if (isDispatched) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setDoorstepModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs transition shadow-xs cursor-pointer"
+                          >
+                            <HelpCircle className="size-3.5 text-amber-600" />
+                            <span>Want to Cancel? (Doorstep Policy)</span>
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setCancelModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition shadow-xs cursor-pointer"
+                        >
+                          <AlertCircle className="size-3.5 text-rose-600" />
+                          <span>Cancel Order</span>
+                        </button>
+                      );
+                    })()}
+
+                    {(order.shiprocketShipmentId || order.shiprocketStatus === "Pushed" || order.status === "Shipped") && (
+                      <div className="inline-flex flex-col gap-1 self-start rounded-xl bg-[#eef5df] p-3 text-xs font-bold text-[#244f31] border border-[#80a03c]/30 shadow-xs">
+                        <div className="flex items-center gap-1.5 font-black">
+                          <Truck className="size-4 text-[#80a03c]" />
+                          <span>Express Logistics Partner</span>
+                        </div>
+                        <div className="text-[11px] text-gray-700 space-y-0.5 font-mono font-medium">
+                          {order.shiprocketOrderId && <div>Order Ref: #{order.shiprocketOrderId}</div>}
+                          {order.shiprocketShipmentId && <div>Shipment ID: #{order.shiprocketShipmentId}</div>}
+                          {order.liveTracking?.tracking_data?.shipment_track?.[0]?.courier_name && (
+                            <div className="text-[#244f31] font-bold">Courier: {order.liveTracking.tracking_data.shipment_track[0].courier_name}</div>
+                          )}
+                          {order.liveTracking?.tracking_data?.shipment_track?.[0]?.awb_code && (
+                            <div className="text-[#244f31] font-bold">AWB Code: {order.liveTracking.tracking_data.shipment_track[0].awb_code}</div>
+                          )}
+                          {order.shiprocketShipmentId && (
+                            <a
+                              href={`https://shiprocket.co/tracking/${order.shiprocketShipmentId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#244f31] hover:bg-[#1c3e26] text-white text-[10px] font-bold shadow-xs transition"
+                            >
+                              <span>Open Live Courier Tracking Page</span>
+                              <ExternalLink className="size-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cancelled Banner */}
+                {order.status === "Cancelled" ? (
+                  <div className="bg-rose-50 border border-rose-200 text-rose-900 rounded-xl p-4 text-xs space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-rose-800 text-sm">
+                      <AlertCircle className="size-4 text-rose-600 shrink-0" />
+                      <span>This order has been cancelled</span>
+                    </div>
+                    <div className="text-gray-700 text-[11px] space-y-1">
+                      {order.cancellationReason && (
+                        <div><span className="font-bold text-gray-800">Reason:</span> {order.cancellationReason}</div>
+                      )}
+                      {order.cancellationDate && (
+                        <div><span className="font-bold text-gray-800">Cancelled on:</span> {new Date(order.cancellationDate).toLocaleString("en-IN")}</div>
+                      )}
+                      <div>
+                        <span className="font-bold text-gray-800">Refund Status:</span>{" "}
+                        <span className="font-semibold text-[#244f31]">
+                          {order.refundStatus || ((order.paymentMethod === "prepaid" || order.method === "Prepaid") ? "Full refund initiated (3–5 business days)" : "Cash on Delivery (₹0 charged)")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Vertical Timeline matching the uploaded reference image */
+                  <div className="py-4 pl-4 sm:pl-8 max-w-xl">
+                    <div className="relative border-l-2 border-emerald-500 pl-6 sm:pl-8 space-y-8">
+                      {steps.map((step) => {
+                        const isDone = step.done;
+                        const isActive = step.active;
+                        const isFuture = !isDone && !isActive;
+
+                        return (
+                          <div key={step.label} className="relative select-none">
+                            {/* Circle Dot on the timeline */}
+                            <span 
+                              className={`absolute -left-[31px] sm:-left-[39px] top-1 size-3.5 sm:size-4 rounded-full border-2 transition-all duration-300 ${
+                                isFuture
+                                  ? "bg-white border-neutral-300"
+                                  : "bg-emerald-500 border-emerald-500"
+                              }`} 
+                            />
+
+                            {/* Header Label and Date */}
+                            <div className="flex items-baseline gap-2">
+                              <h3 className={`text-sm font-extrabold sm:text-base ${isFuture ? "text-neutral-400" : "text-[#17231b]"}`}>
+                                {step.label}
+                              </h3>
+                              {step.date && (
+                                <span className={`text-[10px] sm:text-xs font-semibold ${isFuture ? "text-neutral-300" : "text-neutral-500"}`}>
+                                  {step.date}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Detailed Events Bubble */}
+                            {!isFuture && step.events && step.events.length > 0 && (
+                              <div className="mt-3.5 space-y-4">
+                                {step.events.map((evt, idx) => (
+                                  <div key={idx} className="text-xs sm:text-sm">
+                                    <p className="font-semibold text-neutral-800 leading-snug">
+                                      {evt.title}
+                                    </p>
+                                    {evt.time && (
+                                      <p className="text-[10px] sm:text-xs font-medium text-neutral-400 mt-1">
+                                        {evt.time}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Address & Payment Grid */}
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Delivery Details */}
+              <div className="bg-white border border-[#ddddd9] p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#244f31] mb-3 flex items-center gap-1.5">
+                    <MapPin className="size-4 shrink-0" />
+                    <span>Shipping Address</span>
+                  </h3>
+                  
+                  {authorized ? (
+                    <div className="text-xs font-semibold leading-relaxed text-[#17231b]">
+                      <p className="font-extrabold text-sm">{order.customerName || order.name}</p>
+                      {order.shippingAddress ? (
+                        <>
+                          <p>{order.shippingAddress.street}</p>
+                          <p>{order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.pincode}</p>
+                        </>
+                      ) : (
+                        <p>{order.address}</p>
+                      )}
+                      <p className="mt-2 text-neutral-500">Contact: {order.phone}</p>
+                    </div>
+                  ) : (
+                    <div className="text-xs font-semibold leading-relaxed text-[#666666] space-y-3">
+                      <div className="bg-neutral-50 border p-3.5 rounded-xl text-[10px] text-neutral-500 font-medium">
+                        <p className="font-bold text-[#17231b] mb-1">🔐 Privacy Shield Active</p>
+                        Some delivery address fields are masked for security. To see full shipping credentials, verify the contact details:
+                      </div>
+                      
+                      <div className="border border-neutral-100 p-3 rounded-xl bg-white shadow-xs">
+                        <p className="font-bold text-[#17231b] text-[11px]">{order.customerName}</p>
+                        {order.shippingAddress ? (
+                          <p>{order.shippingAddress.street}, {order.shippingAddress.city}, {order.shippingAddress.pincode}</p>
+                        ) : (
+                          <p>{order.address}</p>
+                        )}
+                        <p className="mt-1 font-semibold">Phone: {order.phone}</p>
+                      </div>
+
+                      <form onSubmit={handleUnmaskSubmit} className="space-y-2 border-t border-neutral-100 pt-3">
+                        <label className="block text-[10px] font-bold text-[#17231b]">Confirm Email or Mobile Number:</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={authFormContact}
+                            onChange={(e) => setAuthFormContact(e.target.value)}
+                            placeholder="e.g. email@domain.com or 9876543210"
+                            className="flex-1 rounded-lg border border-[#ddddd9] px-2.5 py-1.5 text-xs outline-none focus:border-[#244f31]"
+                            required
+                          />
+                          <button
+                            type="submit"
+                            disabled={authLoading}
+                            className="rounded-lg bg-[#244f31] text-white font-bold text-[10px] py-1.5 px-3 hover:bg-[#1d3b24] disabled:opacity-50 transition"
+                          >
+                            Verify
+                          </button>
+                        </div>
+                        {authError && <p className="text-[10px] text-rose-600 font-bold">{authError}</p>}
+                      </form>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Payment Summary */}
+              <div className="bg-white border border-[#ddddd9] p-6 rounded-2xl shadow-sm flex flex-col justify-between">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-[#244f31] mb-3 flex items-center gap-1.5">
+                    <CreditCard className="size-4 shrink-0" />
+                    <span>Payment Method</span>
+                  </h3>
+                  <div className="text-xs font-semibold leading-relaxed text-[#17231b]">
+                    <p className="font-extrabold capitalize text-sm">{order.paymentMethod || "prepaid"} payment</p>
+                    <p className="text-[#666666] mt-1">Transaction ref: <span className="font-bold text-neutral-800">TXN-{order.id}</span></p>
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-[#f0f0eb] pt-4 space-y-1.5 text-xs font-semibold text-[#666666]">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <span className="text-[#17231b]">₹{order.total}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Shipping Charges</span>
+                    <span className="text-[#244f31] font-bold">FREE</span>
+                  </div>
+                  <div className="flex justify-between border-t border-[#f0f0eb] pt-2 font-bold text-sm text-[#17231b]">
+                    <span>Total Paid</span>
+                    <span className="text-[#244f31]">₹{order.total}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Package Items */}
+            <div className="bg-white border border-[#ddddd9] p-6 rounded-2xl shadow-sm">
+              {(() => {
+                const parsedItemsList = (() => {
+                  const itemsStr = order.items;
+                  if (!itemsStr) return [];
+                  if (Array.isArray(itemsStr)) return itemsStr;
+                  if (typeof itemsStr !== "string") return [];
+                  
+                  const parts = itemsStr.split(", ");
+                  return parts.map((part) => {
+                    const lastXIndex = part.lastIndexOf(" x");
+                    if (lastXIndex === -1) {
+                      return { name: part.trim(), quantity: 1 };
+                    }
+                    const name = part.slice(0, lastXIndex).trim();
+                    const qtyStr = part.slice(lastXIndex + 2).trim();
+                    const quantity = parseInt(qtyStr, 10) || 1;
+                    return { name, quantity };
+                  });
+                })();
+
+                return (
+                  <>
+                    <h3 className="text-xs font-black uppercase tracking-wider text-[#244f31] mb-4 flex items-center gap-1.5">
+                      <Package className="size-4 shrink-0" />
+                      <span>Package Items ({parsedItemsList.length || 1})</span>
+                    </h3>
+
+                    <div className="divide-y divide-[#f0f0eb]">
+                      {parsedItemsList.length > 0 ? (
+                        parsedItemsList.map((item: any, idx: number) => {
+                          const matchedProduct = products.find(
+                            (p) => p.name.toLowerCase().trim() === item.name.toLowerCase().trim()
+                          );
+
+                          return (
+                            <div key={idx} className="flex gap-4 py-4 first:pt-0 last:pb-0">
+                              <div className="relative size-16 shrink-0 bg-neutral-100 rounded-lg overflow-hidden border">
+                                <Image
+                                  src={matchedProduct?.image || "/product-placeholder.png"}
+                                  alt={item.name || "Herbal Product"}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 text-xs">
+                                <h4 className="font-extrabold text-[#17231b] text-sm leading-snug hover:text-[#80a03c] transition">
+                                  {matchedProduct ? (
+                                    <Link href={`/products/${matchedProduct.slug}`}>
+                                      {item.name}
+                                    </Link>
+                                  ) : (
+                                    <span>{item.name}</span>
+                                  )}
+                                </h4>
+                                <p className="text-neutral-500 font-semibold mt-1">Quantity: {item.quantity}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="font-extrabold text-[#244f31]">
+                                    ₹{matchedProduct ? matchedProduct.price * item.quantity : order.total}
+                                  </span>
+                                  {matchedProduct?.compareAt && (
+                                    <span className="text-[10px] text-neutral-400 line-through">
+                                      ₹{matchedProduct.compareAt * item.quantity}
+                                    </span>
+                                  )}
+                                </div>
+                                {String(order.status || "").toLowerCase().includes("delivered") && (
+                                  <div className="mt-2.5">
+                                    <Link
+                                      href={`/products/${matchedProduct?.slug || products[0]?.slug || "ayurvedic-remedies"}?rate=true&orderId=${encodeURIComponent(order.id)}&customerName=${encodeURIComponent(order.customerName || order.customer || "")}&phone=${encodeURIComponent(order.customerPhone || order.phone || "")}#reviews`}
+                                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#244f31] hover:text-white bg-[#eef5df] hover:bg-[#244f31] px-2.5 py-1 rounded-lg border border-[#80a03c]/40 transition"
+                                    >
+                                      <span>⭐ Rate & Review this Remedy</span>
+                                    </Link>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="flex gap-4 py-4 first:pt-0 last:pb-0">
+                          <div className="size-16 bg-neutral-100 rounded-lg flex items-center justify-center border text-neutral-400 shrink-0">
+                            🌿
+                          </div>
+                          <div className="flex-1 text-xs">
+                            <h4 className="font-extrabold text-[#17231b] text-sm leading-snug">Herbal Custom Remedy Formulations</h4>
+                            <p className="text-neutral-500 font-semibold mt-1">Quantity: 1</p>
+                            <p className="font-extrabold text-[#244f31] mt-1">₹{order.total}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Help / support drawer triggers */}
+            <div className="bg-[#eef5df] border border-[#80a03c]/20 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="text-xs font-semibold text-[#244f31]">
+                <h4 className="font-extrabold text-sm mb-0.5 flex items-center gap-1.5">
+                  <HelpCircle className="size-4 shrink-0" />
+                  <span>Need assistance with this order?</span>
+                </h4>
+                <p className="text-neutral-600 mt-1">Our automated support dashboard and medical assistants are online 24/7 to resolve delivery questions.</p>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                <a
+                  href={`https://api.whatsapp.com/send?phone=${cleanNumber || "917247824101"}&text=${encodeURIComponent(`I need help tracking my order: ${order.id}.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-xl bg-[#244f31] hover:bg-[#1d3b24] text-white font-bold text-xs py-2 px-4 shadow-xs transition flex items-center gap-1.5"
+                >
+                  <span>Chat on WhatsApp</span>
+                  <ExternalLink className="size-3.5" />
+                </a>
+                <Link
+                  href="/contact-us"
+                  className="rounded-xl border border-[#244f31]/30 hover:bg-[#244f31]/5 text-[#244f31] font-bold text-xs py-2 px-4 transition"
+                >
+                  Contact Desk
+                </Link>
+              </div>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {/* Cancellation Modal (Amazon & Flipkart System) */}
+      {cancelModalOpen && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#ddddd9] relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => !cancelLoading && setCancelModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+            >
+              <X className="size-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="size-10 rounded-xl bg-rose-100 flex items-center justify-center text-rose-700 shrink-0">
+                <AlertCircle className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#17231b]">Cancel Order</h3>
+                <p className="text-xs text-gray-500 font-medium">Order ID: {order.id}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCancelOrder} className="space-y-4 text-xs">
+              {!authorized ? (
+                <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 space-y-1.5">
+                  <label className="block font-bold text-[#17231b]">
+                    Verify Registered Mobile Number or Email <span className="text-rose-600">*</span>
+                  </label>
+                  <p className="text-[11px] text-gray-600">
+                    For security, please enter the mobile number{order.phone ? ` (ending in ${order.phone.slice(-4)})` : ""} or email used when placing this order.
+                  </p>
+                  <input
+                    type="text"
+                    value={cancelContactInput}
+                    onChange={(e) => setCancelContactInput(e.target.value)}
+                    placeholder="Enter 10-digit mobile number or email"
+                    className="w-full rounded-xl border border-[#ddddd9] bg-white p-2.5 text-xs font-semibold outline-none focus:border-[#244f31]"
+                    required
+                  />
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2 text-[11px] text-emerald-800 font-semibold">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span>Verified via registered contact ({order.phone || order.email})</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1.5">
+                  Reason for cancellation <span className="text-rose-600">*</span>
+                </label>
+                <select
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  className="w-full rounded-xl border border-[#ddddd9] p-2.5 text-xs font-semibold outline-none focus:border-[#244f31] bg-white cursor-pointer"
+                  required
+                >
+                  <option value="Ordered by mistake">Ordered by mistake</option>
+                  <option value="Found better price / discount elsewhere">Found better price / discount elsewhere</option>
+                  <option value="Incorrect delivery address or contact number">Incorrect delivery address or contact number</option>
+                  <option value="Delivery time is too long">Delivery time is too long</option>
+                  <option value="Purchased duplicate item">Purchased duplicate item</option>
+                  <option value="Changed my mind">Changed my mind</option>
+                  <option value="Other">Other reason</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1.5">
+                  Additional comments (Optional)
+                </label>
+                <textarea
+                  value={cancelComments}
+                  onChange={(e) => setCancelComments(e.target.value)}
+                  rows={2}
+                  placeholder="Tell us why you want to cancel..."
+                  className="w-full rounded-xl border border-[#ddddd9] p-2.5 text-xs outline-none focus:border-[#244f31]"
+                />
+              </div>
+
+              {/* Refund / Policy Breakdown */}
+              <div className="bg-[#f8faf1] border border-[#ddddd9] rounded-xl p-3.5 space-y-1.5 text-[11px]">
+                <span className="font-extrabold uppercase tracking-wider text-[#244f31] text-[10px] block">
+                  Refund & Policy Information
+                </span>
+                {(order.paymentMethod === "prepaid" || order.method === "Prepaid") ? (
+                  <div className="text-gray-700">
+                    💳 Full refund of <strong>₹{order.total}</strong> will be initiated to your original payment method (PhonePe/UPI/Card) within <strong>3–5 business days</strong>.
+                  </div>
+                ) : (
+                  <div className="text-gray-700">
+                    💵 This is a Cash on Delivery order. <strong>₹0 cancellation fee</strong> applies. You will not be charged.
+                  </div>
+                )}
+              </div>
+
+              {cancelError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold">
+                  {cancelError}
+                </div>
+              )}
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={cancelLoading}
+                  onClick={() => setCancelModalOpen(false)}
+                  className="flex-1 py-2.5 px-4 rounded-xl border border-gray-300 font-bold text-gray-700 hover:bg-gray-50 transition text-xs cursor-pointer"
+                >
+                  Don&apos;t Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelLoading}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition text-xs flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs"
+                >
+                  {cancelLoading ? (
+                    <>
+                      <RefreshCw className="size-3.5 animate-spin" />
+                      <span>Cancelling...</span>
+                    </>
+                  ) : (
+                    <span>Confirm Cancellation</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Doorstep Refusal Guidance Modal (Amazon & Flipkart System) */}
+      {doorstepModalOpen && order && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#ddddd9] relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setDoorstepModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+            >
+              <X className="size-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="size-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <Truck className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#17231b]">Package In Transit</h3>
+                <p className="text-xs text-gray-500 font-medium">How to cancel dispatched orders</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 mb-3.5 space-y-1.5">
+              <p className="font-bold text-amber-900">
+                Why can&apos;t this order be cancelled online?
+              </p>
+              <p className="text-gray-700 leading-relaxed text-[11px]">
+                Your parcel <strong>#{order.id}</strong> has already departed our warehouse with our logistics partner. As per policy (identical to Amazon & Flipkart), dispatched shipments cannot be halted digitally mid-journey.
+              </p>
+            </div>
+
+            <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-3.5 text-xs text-emerald-950 mb-4 space-y-2">
+              <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
+                <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                <span>Doorstep Refusal Option (100% Free)</span>
+              </div>
+              <p className="text-gray-700 text-[11px] leading-relaxed">
+                When the delivery executive arrives at your doorstep, you can simply decline delivery:
+              </p>
+              <div className="bg-white border border-emerald-300 rounded-lg p-2.5 font-mono font-bold text-[#244f31] text-[11px]">
+                &quot;I do not want this order. Please mark it as Customer Refused / RTO.&quot;
+              </div>
+              <div className="text-gray-600 text-[10px] space-y-0.5 pt-1">
+                {(order.paymentMethod === "prepaid" || order.method === "Prepaid") ? (
+                  <p>• Once returned to our fulfillment center, full refund of <strong>₹{order.total}</strong> will be automatically credited back to your account.</p>
+                ) : (
+                  <p>• This was Cash on Delivery (COD). <strong>₹0 charge applies</strong> — you pay nothing.</p>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDoorstepModalOpen(false)}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#244f31] text-white font-bold text-xs hover:bg-[#1d3b24] transition cursor-pointer shadow-xs"
+            >
+              Understood, Thank You
+            </button>
+          </div>
+        </div>
+      )}
+
+      <SiteFooter />
+    </main>
+  );
+}
+
+export default function TrackOrderPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-[#f8faf1]">
+        <div className="size-10 animate-spin rounded-full border-4 border-[#244f31] border-t-transparent"></div>
+      </div>
+    }>
+      <TrackOrderContent />
+    </Suspense>
+  );
+}
