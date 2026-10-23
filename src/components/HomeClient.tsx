@@ -314,7 +314,11 @@ export default function HomeClient({
 
   // Filter products by selected concern if active
   const filteredProducts = selectedConcern
-    ? catalog.filter((p) => (p.concern || "").toLowerCase() === selectedConcern.toLowerCase())
+    ? catalog.filter((p) => {
+        const pConcern = (p.concern || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+        const sConcern = selectedConcern.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+        return pConcern === sConcern || pConcern.includes(sConcern) || sConcern.includes(pConcern);
+      })
     : catalog;
 
   return (
