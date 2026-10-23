@@ -73,29 +73,72 @@ export default function HeroSlider({
 
   const nextSlide = useCallback(() => {
     if (slideCount <= 1) return;
+    setSlideIndex((prev) => {
+      // Guard against unbounded index overflow
+      if (prev >= slideCount + 1) return 1;
+      return prev + 1;
+    });
     setIsTransitioning(true);
-    setSlideIndex((prev) => prev + 1);
   }, [slideCount]);
 
   const prevSlide = useCallback(() => {
     if (slideCount <= 1) return;
+    setSlideIndex((prev) => {
+      // Guard against underflow
+      if (prev <= 0) return slideCount;
+      return prev - 1;
+    });
     setIsTransitioning(true);
-    setSlideIndex((prev) => prev - 1);
   }, [slideCount]);
 
   // Handle seamless infinite loop jump at cloned boundaries
-  const handleTransitionEnd = () => {
+  const handleTransitionEnd = (e?: React.TransitionEvent<HTMLDivElement>) => {
+    if (e && e.target !== e.currentTarget) return;
     if (slideCount <= 1) return;
-    if (slideIndex === 0) {
+    if (slideIndex <= 0) {
       // Jumped to S_last clone on left -> instantly swap to real S_last (index slideCount)
       setIsTransitioning(false);
       setSlideIndex(slideCount);
-    } else if (slideIndex === slideCount + 1) {
+    } else if (slideIndex >= slideCount + 1) {
       // Jumped to S_0 clone on right -> instantly swap to real S_0 (index 1)
       setIsTransitioning(false);
       setSlideIndex(1);
     }
   };
+
+  // Safety Watchdog: If transitionend is dropped (e.g. user scrolled offscreen, background tab),
+  // automatically snap back within 600ms so the carousel never slides into empty void
+  useEffect(() => {
+    if (slideCount <= 1) return;
+    if (slideIndex >= slideCount + 1 || slideIndex <= 0) {
+      const safetyTimer = setTimeout(() => {
+        setIsTransitioning(false);
+        setSlideIndex(slideIndex >= slideCount + 1 ? 1 : slideCount);
+      }, 580);
+      return () => clearTimeout(safetyTimer);
+    }
+  }, [slideIndex, slideCount]);
+
+  // Boundary clamp when slides change or resize occurs
+  useEffect(() => {
+    if (slideIndex > slideCount + 1 || slideIndex < 0) {
+      setIsTransitioning(false);
+      setSlideIndex(1);
+    }
+  }, [slideCount, slideIndex]);
+
+  // Pause autoplay when tab is inactive/hidden to avoid dropped frames and runaway intervals
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        setIsPaused(true);
+      } else {
+        setIsPaused(false);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   // Autoplay (every 5.5s)
   useEffect(() => {
@@ -198,7 +241,14 @@ export default function HeroSlider({
           >
             {extendedSlides.map((slide, idx) => {
               const isSlideActive = idx === slideIndex;
-              const formattedImage = "/brand/hero-taitva-1200x800.jpg";
+              const slideImage =
+                slide.image && typeof slide.image === "string" && slide.image.trim()
+                  ? getFormattedSlideImage(slide.image)
+                  : "/brand/hero-taitva-1200x800.jpg";
+              const mobileImage =
+                slide.mobileImage && typeof slide.mobileImage === "string" && slide.mobileImage.trim()
+                  ? getFormattedSlideImage(slide.mobileImage)
+                  : slideImage;
 
               return (
                 <div
@@ -215,12 +265,14 @@ export default function HeroSlider({
                     className="block size-full focus:outline-none cursor-pointer relative flex items-center justify-center"
                   >
                     <picture className="size-full flex items-center justify-center">
-                      <source media="(max-width: 639px)" srcSet="/brand/hero-taitva-1200x800.jpg" />
+                      <source media="(max-width: 639px)" srcSet={mobileImage} />
                       <img
-                        src={formattedImage}
+                        src={slideImage}
                         alt={slide.title || "Pure Ayur Herbs Ayurvedic Formulation Banner"}
                         onError={(e) => {
-                          e.currentTarget.src = "/brand/hero-taitva-1200x800.jpg";
+                          if (typeof window !== "undefined" && !e.currentTarget.src.endsWith("/brand/hero-taitva-1200x800.jpg")) {
+                            e.currentTarget.src = "/brand/hero-taitva-1200x800.jpg";
+                          }
                         }}
                         className="size-full object-cover object-center"
                         loading={idx === 1 ? "eager" : "lazy"}
