@@ -14,15 +14,19 @@ export const DEFAULT_HEALTH_GOALS = [
     id: "sugar",
     name: "Sugar Management",
     concernKey: "Sugar Management",
-    image:
-      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80",
+    image: "/brand/nourish-supplements.jpg",
   },
   {
     id: "energy",
     name: "Energy and Vitality",
     concernKey: "Energy and Vitality",
-    image:
-      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
+    image: "/brand/nourish-superfoods.jpg",
+  },
+  {
+    id: "nutrition",
+    name: "Nutrition & Detox",
+    concernKey: "Nutrition",
+    image: "/brand/nourish-nutrition.jpg",
   },
   {
     id: "fitness",
@@ -254,16 +258,16 @@ export default function ConcernFilter({
   return (
     <section
       id="concerns"
-      className="mx-auto max-w-[1200px] px-4 py-8 sm:py-12 md:px-6 select-none"
+      className="mx-auto max-w-[1200px] px-3 sm:px-6 py-5 sm:py-8 md:py-10 select-none"
     >
       {/* Centered Serif Section Title: SHOP BY HEALTH GOAL */}
-      <h2 className="text-xl sm:text-2xl md:text-3xl font-serif tracking-widest uppercase text-neutral-900 font-normal text-center mb-6 sm:mb-8">
+      <h2 className="text-base sm:text-xl md:text-2xl font-serif tracking-widest uppercase text-neutral-800 font-normal text-center mb-4 sm:mb-6">
         SHOP BY HEALTH GOAL
       </h2>
 
       {/* 3 Categories Slider Container (Strictly 3 visible, Auto-sliding, User Swipeable) */}
       <div
-        className="relative mx-auto max-w-[860px] overflow-hidden cursor-grab active:cursor-grabbing"
+        className="relative mx-auto max-w-[360px] sm:max-w-[420px] md:max-w-[760px] overflow-hidden cursor-grab active:cursor-grabbing"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => {
           setIsPaused(false);
@@ -276,14 +280,15 @@ export default function ConcernFilter({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
       >
-        {/* Slider Track (Displays 3 items across width, advances by 1 item) */}
+        {/* Slider Track (Displays exactly 3 items across container width, advances by 1 item) */}
         <div
           onTransitionEnd={handleTransitionEnd}
           className="flex will-change-transform"
           style={{
-            transform: `translateX(-${currentIndex * (100 / 3)}%)`,
+            width: `${(extendedList.length / 3) * 100}%`,
+            transform: `translateX(-${(currentIndex * 100) / extendedList.length}%)`,
             transition: isTransitioning
-              ? "transform 600ms cubic-bezier(0.25, 1, 0.5, 1)"
+              ? "transform 550ms cubic-bezier(0.25, 1, 0.5, 1)"
               : "none",
           }}
         >
@@ -298,7 +303,8 @@ export default function ConcernFilter({
             return (
               <div
                 key={`${cat.id}_${idx}`}
-                className="w-1/3 shrink-0 px-1.5 sm:px-3 md:px-5 flex justify-center"
+                style={{ width: `${100 / extendedList.length}%` }}
+                className="shrink-0 px-1 sm:px-2 md:px-3 flex justify-center"
               >
                 <button
                   type="button"
@@ -306,13 +312,13 @@ export default function ConcernFilter({
                   className="group flex flex-col items-center cursor-pointer focus:outline-none w-full"
                 >
                   {/* Card Frame:
-                      - MOBILE (< md): Distinct Arched / Dome Frame (aspect-[3/4] rounded-t-full)
-                      - DESKTOP (md+): Perfect Circle Frame (aspect-square rounded-full max-w-[200px])
+                      - MOBILE (< md): Compact Elegant Arched Dome (max-w-[100px] aspect-[4/5] rounded-t-full rounded-b-sm)
+                      - DESKTOP (md+): Perfect Circle Frame (aspect-square rounded-full md:max-w-[160px])
                   */}
                   <div
-                    className={`relative w-full overflow-hidden transition-all duration-300 bg-[#f7f5f0] shadow-xs
-                      aspect-[3/4] rounded-t-full border border-[#023915]/20
-                      md:aspect-square md:rounded-full md:max-w-[200px] md:mx-auto md:border md:border-neutral-200 md:bg-white
+                    className={`relative w-full max-w-[100px] sm:max-w-[115px] md:max-w-[160px] mx-auto overflow-hidden transition-all duration-300 bg-[#f7f5f0] shadow-2xs
+                      aspect-[4/5] rounded-t-full rounded-b-sm border border-neutral-200/80
+                      md:aspect-square md:rounded-full md:border-neutral-200 md:bg-white
                       ${
                         isSelected
                           ? "border-2 border-[#023915] ring-2 ring-[#023915]/20 shadow-md scale-102"
@@ -330,7 +336,7 @@ export default function ConcernFilter({
 
                   {/* Category Label Underneath */}
                   <span
-                    className={`mt-2.5 sm:mt-3 text-xs sm:text-sm tracking-wide text-center transition-colors line-clamp-1 ${
+                    className={`mt-1.5 sm:mt-2 text-[11px] sm:text-xs md:text-sm tracking-tight text-center transition-colors line-clamp-1 max-w-[95px] sm:max-w-[115px] md:max-w-none ${
                       isSelected
                         ? "font-bold text-[#023915]"
                         : "font-normal text-neutral-800 group-hover:text-[#023915]"
@@ -347,7 +353,7 @@ export default function ConcernFilter({
 
       {/* Subtle Pagination Dots (Elongated active pill dot + round inactive dots) */}
       {itemCount > 3 && (
-        <div className="flex items-center justify-center gap-1.5 mt-5 sm:mt-6">
+        <div className="flex items-center justify-center gap-1.5 mt-3.5 sm:mt-5">
           {baseItems.map((_, i) => (
             <button
               key={i}
@@ -359,8 +365,8 @@ export default function ConcernFilter({
               aria-label={`Go to category ${i + 1}`}
               className={`rounded-full transition-all duration-300 cursor-pointer ${
                 i === activeNormalizedIndex
-                  ? "w-6 h-1.5 bg-[#023915]"
-                  : "size-1.5 bg-neutral-300 hover:bg-neutral-400"
+                  ? "w-4 sm:w-5 h-1 sm:h-1.5 bg-[#023915]"
+                  : "size-1 sm:size-1.5 bg-neutral-300 hover:bg-neutral-400"
               }`}
             />
           ))}

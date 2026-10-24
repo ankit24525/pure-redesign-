@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { heroSlides as defaultSlides } from "@/lib/store";
 
 export default function HeroSlider({
@@ -225,12 +226,12 @@ export default function HeroSlider({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="w-full bg-white pt-3 sm:pt-5 md:pt-6 pb-2 select-none outline-none"
+      className="w-full bg-white pt-0 pb-1 select-none outline-none"
     >
-      {/* Taitva Centered Container with Side Gaps (Strict 1200x800 Canvas) */}
-      <div className="mx-auto max-w-[1200px] px-2 sm:px-4 md:px-6">
-        {/* Banner Frame (Exact 1200x800 Aspect Ratio Container) */}
-        <div className="relative w-full max-w-[1200px] aspect-[1200/800] overflow-hidden rounded-xl md:rounded-2xl bg-[#023915]/5 shadow-2xs">
+      {/* Container: Strict 1200x800 Canvas (max-w-[1200px] mx-auto) */}
+      <div className="w-full md:mx-auto md:max-w-[1200px] px-0">
+        {/* Banner Frame: Exact 1200x800 px Container (3:2 Aspect Ratio) */}
+        <div className="relative w-full max-w-[1200px] mx-auto aspect-[1200/800] overflow-hidden rounded-none bg-[#023915]/5 shadow-none">
           {/* Sliding Track */}
           <div
             onTransitionEnd={handleTransitionEnd}
@@ -286,11 +287,40 @@ export default function HeroSlider({
               );
             })}
           </div>
+
+          {/* Desktop Arrow Navigation Controls (Hidden on mobile, matching Taitva Desktop) */}
+          {slideCount > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  handleInteraction();
+                  prevSlide();
+                }}
+                className="hidden md:flex absolute left-3 lg:left-4 top-1/2 -translate-y-1/2 size-10 lg:size-11 rounded-full bg-white/95 hover:bg-white border border-neutral-300 shadow-md items-center justify-center text-neutral-800 hover:text-black hover:scale-105 active:scale-95 transition cursor-pointer z-20"
+                aria-label="Previous Slide"
+              >
+                <ChevronLeft className="size-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleInteraction();
+                  nextSlide();
+                }}
+                className="hidden md:flex absolute right-3 lg:right-4 top-1/2 -translate-y-1/2 size-10 lg:size-11 rounded-full bg-white/95 hover:bg-white border border-neutral-300 shadow-md items-center justify-center text-neutral-800 hover:text-black hover:scale-105 active:scale-95 transition cursor-pointer z-20"
+                aria-label="Next Slide"
+              >
+                <ChevronRight className="size-5" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Taitva Centered Pagination Dots (Directly Below Banner Frame) */}
         {slideCount > 1 && (
-          <div className="flex items-center justify-center gap-2 mt-3 sm:mt-4 mb-2">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-2.5 sm:mt-4 mb-1 sm:mb-2">
             {activeSlides.map((_, i) => (
               <button
                 key={i}
