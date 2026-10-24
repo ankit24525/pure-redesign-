@@ -20,21 +20,25 @@ export default function HeroSlider({
 
   const taitvaLeadSlide = {
     fullWidthBanner: true,
-    mobileImage: "/brand/hero-taitva-1200x800.jpg",
-    id: "slide_taitva_1200x800",
-    title: "Himalayan Ayurvedic Goodness & Vitality",
+    mobileImage: "/brand/hero-wild-authentic-pure.jpg",
+    id: "slide_taitva_wild_pure",
+    title: "Wild. Authentic. Pure.",
     subtitle: "AUTHENTIC BOTANICAL WELLNESS CRAFTED FROM HIMALAYAN HERBS",
     offer: "Special Launch Offer",
     ctaText: "SHOP NOW",
     href: "/products",
     badge: "100% Himalayan Herbs",
-    image: "/brand/hero-taitva-1200x800.jpg",
+    image: "/brand/hero-wild-authentic-pure.jpg",
     bgColor: "#023915",
   };
 
   const rawSlides = slides && slides.length > 0 ? slides : defaultSlides;
   const filteredOtherSlides = rawSlides.filter(
-    (s: any) => s.image !== "/brand/hero-taitva-1200x800.jpg" && s.id !== "slide_taitva_1200x800"
+    (s: any) =>
+      s.image !== "/brand/hero-wild-authentic-pure.jpg" &&
+      s.image !== "/brand/hero-taitva-1200x800.jpg" &&
+      s.id !== "slide_taitva_wild_pure" &&
+      s.id !== "slide_taitva_1200x800"
   );
 
   // Convert any active marketing banners with placement "Top Hero Slider" into slides
@@ -225,9 +229,9 @@ export default function HeroSlider({
       className="w-full bg-white pt-3 sm:pt-5 md:pt-6 pb-2 select-none outline-none"
     >
       {/* Taitva Centered Container with Side Gaps (Strict 1200x800 Canvas) */}
-      <div className="mx-auto max-w-[1200px] px-4 sm:px-6">
+      <div className="mx-auto max-w-[1200px] px-2 sm:px-4 md:px-6">
         {/* Banner Frame (Exact 1200x800 Aspect Ratio Container) */}
-        <div className="relative w-full max-w-[1200px] h-[400px] sm:h-[530px] md:h-[660px] lg:h-[760px] xl:h-[800px] aspect-[1200/800] overflow-hidden rounded-xl md:rounded-2xl bg-[#023915]/5 shadow-2xs">
+        <div className="relative w-full max-w-[1200px] aspect-[1200/800] overflow-hidden rounded-xl md:rounded-2xl bg-[#023915]/5 shadow-2xs">
           {/* Sliding Track */}
           <div
             onTransitionEnd={handleTransitionEnd}
@@ -270,8 +274,8 @@ export default function HeroSlider({
                         src={slideImage}
                         alt={slide.title || "Pure Ayur Herbs Ayurvedic Formulation Banner"}
                         onError={(e) => {
-                          if (typeof window !== "undefined" && !e.currentTarget.src.endsWith("/brand/hero-taitva-1200x800.jpg")) {
-                            e.currentTarget.src = "/brand/hero-taitva-1200x800.jpg";
+                          if (typeof window !== "undefined" && !e.currentTarget.src.endsWith("/brand/hero-wild-authentic-pure.jpg")) {
+                            e.currentTarget.src = "/brand/hero-wild-authentic-pure.jpg";
                           }
                         }}
                         className="size-full object-cover object-center"

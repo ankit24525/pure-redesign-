@@ -1,4 +1,11 @@
-import { redirect } from "next/navigation";
+import ProductsCatalogClient from "@/components/ProductsCatalogClient";
+import { Suspense } from "react";
+
+export const metadata = {
+  title: "New Arrivals & All Products | Pure Ayur Herbs",
+  description:
+    "Explore 100% Ministry of AYUSH certified Ayurvedic herbal juices, churna powders, and vitality elixirs.",
+};
 
 export default async function ProductsPage({
   searchParams,
@@ -6,14 +13,18 @@ export default async function ProductsPage({
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const resolvedParams = searchParams ? await searchParams : {};
-  const params = new URLSearchParams();
-  for (const [key, val] of Object.entries(resolvedParams)) {
-    if (typeof val === "string") {
-      params.set(key, val);
-    } else if (Array.isArray(val) && val.length > 0) {
-      params.set(key, val[0]);
-    }
-  }
-  const queryString = params.toString();
-  redirect(queryString ? `/search?${queryString}` : "/search");
+  const title =
+    typeof resolvedParams.title === "string"
+      ? resolvedParams.title
+      : typeof resolvedParams.category === "string"
+      ? resolvedParams.category
+      : "New Arrivals";
+  const category =
+    typeof resolvedParams.category === "string" ? resolvedParams.category : undefined;
+
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <ProductsCatalogClient initialTitle={title} initialCategory={category} />
+    </Suspense>
+  );
 }

@@ -111,6 +111,7 @@ export default function SiteHeader({
     };
   }, []);
   const [desktopSearchOpen, setDesktopSearchOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [concernsDropdownOpen, setConcernsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -358,9 +359,59 @@ export default function SiteHeader({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white border-b border-neutral-200/80 px-4 md:px-8 py-3">
-        {/* Main Navigation Row */}
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-3 md:gap-6">
+      <header className="sticky top-0 z-40 bg-white border-b border-neutral-200/80 px-4 md:px-8 py-2.5 sm:py-3">
+        {/* Mobile Header Row (Matching Screenshot: [Shopping Bag + Badge] [Centered Logo] [Search Icon]) */}
+        <div className="flex md:hidden items-center justify-between w-full">
+          {/* Left: Shopping Bag with Badge */}
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            className="relative p-1.5 text-neutral-800 transition hover:bg-neutral-100 rounded-full cursor-pointer"
+            aria-label="Shopping Cart"
+          >
+            <ShoppingBag className="size-6 text-neutral-900 stroke-[1.75]" />
+            {totalCartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex size-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#023915] text-[10px] font-bold text-white shadow-2xs">
+                {totalCartCount}
+              </span>
+            )}
+          </button>
+
+          {/* Center: Brand Logo */}
+          <Link href="/" className="flex items-center gap-2 group">
+            <div className="relative flex size-8 sm:size-9 items-center justify-center rounded-full bg-white p-0.5 border border-[#023915]/20 shrink-0 overflow-hidden">
+              <Image
+                src="/brand/pure-ayur-logo.png"
+                alt="Pure Ayur Herbs Logo"
+                width={36}
+                height={36}
+                className="size-full rounded-full object-cover group-hover:scale-105 transition-transform duration-300"
+                priority
+              />
+            </div>
+            <div className="flex flex-col leading-none text-left">
+              <span className="text-sm sm:text-base font-black uppercase tracking-wider text-[#023915]">
+                PURE AYUR
+              </span>
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.25em] text-[#80a03c]">
+                HERBS
+              </span>
+            </div>
+          </Link>
+
+          {/* Right: Search Toggle Icon */}
+          <button
+            type="button"
+            onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+            className="p-1.5 text-neutral-800 transition hover:bg-neutral-100 rounded-full cursor-pointer"
+            aria-label="Search remedies"
+          >
+            <Search className="size-6 text-neutral-900 stroke-[1.75]" />
+          </button>
+        </div>
+
+        {/* Desktop Header Row (Hidden on mobile) */}
+        <div className="hidden md:flex mx-auto max-w-[1440px] items-center justify-between gap-3 md:gap-6">
           {/* Left: Mobile Menu & Brand Logo */}
           <div className="flex items-center gap-2.5 md:gap-4 shrink-0">
             <button
@@ -722,126 +773,123 @@ export default function SiteHeader({
           </div>
         </div>
 
-        {/* Mobile Search Bar Row (Mobile only: md:hidden) */}
-        <div className="mt-2.5 md:hidden">
-          <div ref={mobileSearchContainerRef} className="relative">
-            <form onSubmit={handleSearchSubmit} className="relative flex items-center">
-              <Search className="absolute left-3 size-3.5 text-neutral-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onFocus={() => {
-                  if (searchQuery.trim().length > 0) setIsSearching(true);
-                }}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search for "${headerSearchSuggestions[suggestionIdx] || "Ayurvedic remedies"}"`}
-                className="w-full bg-[#f8faf5] border border-neutral-200 rounded-full py-1.5 pl-8 pr-8 text-xs text-neutral-800 placeholder:text-neutral-400 outline-none focus:border-[#023915] transition"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setIsSearching(false);
+        {/* Mobile Search Bar Row (Shown when search icon clicked: md:hidden) */}
+        {mobileSearchOpen && (
+          <div className="mt-2.5 md:hidden animate-in fade-in slide-in-from-top-1 duration-150">
+            <div ref={mobileSearchContainerRef} className="relative">
+              <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+                <Search className="absolute left-3 size-3.5 text-neutral-400 pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onFocus={() => {
+                    if (searchQuery.trim().length > 0) setIsSearching(true);
                   }}
-                  className="absolute right-2.5 p-0.5 text-neutral-400 hover:text-neutral-700"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
-            </form>
-
-            {/* Live Search Results Dropdown */}
-            {isSearching && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-96 overflow-y-auto rounded-xl border border-neutral-200 bg-white shadow-xl">
-                {searchResults.length > 0 ? (
-                  <div className="divide-y divide-neutral-100">
-                    <div className="flex items-center justify-between bg-neutral-50 px-4 py-2 text-xs font-bold text-[#023915]">
-                      <span>Found {searchResults.length} matching remedies</span>
-                      <Link
-                        href={`/search?q=${encodeURIComponent(searchQuery)}`}
-                        onClick={() => setIsSearching(false)}
-                        className="text-[11px] font-semibold text-[#80a03c] hover:underline"
-                      >
-                        View all →
-                      </Link>
-                    </div>
-                    {searchResults.map((product) => (
-                      <Link
-                        key={product.id}
-                        href={`/products/${product.slug || product.id}`}
-                        onClick={() => {
-                          setSearchQuery("");
-                          setIsSearching(false);
-                        }}
-                        className="flex cursor-pointer items-center gap-3 p-3 transition hover:bg-neutral-50"
-                      >
-                        <Image
-                          src={product.image}
-                          alt={product.name}
-                          width={48}
-                          height={48}
-                          className="size-12 rounded object-contain shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="truncate text-xs font-bold text-neutral-900">
-                            {product.name}
-                          </h4>
-                          <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
-                            <span className="font-bold text-[#023915]">₹{product.price}</span>
-                            {product.compareAt > product.price && (
-                              <span className="line-through text-[11px]">₹{product.compareAt}</span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleItemQuantityChange(product.id, 1);
-                          }}
-                          className="rounded-full bg-[#023915] px-3 py-1 text-xs font-bold text-white transition hover:bg-black shrink-0"
-                        >
-                          ADD
-                        </button>
-                      </Link>
-                    ))}
-                    <div className="bg-neutral-50 p-2.5 text-center">
-                      <Link
-                        href={`/search?q=${encodeURIComponent(searchQuery)}`}
-                        onClick={() => setIsSearching(false)}
-                        className="text-xs font-bold text-[#023915] hover:underline"
-                      >
-                        View all {searchResults.length} results for "{searchQuery}" →
-                      </Link>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-5 text-center">
-                    <p className="text-xs font-medium text-neutral-600">
-                      No matching products found for "{searchQuery}"
-                    </p>
-                  </div>
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search for "${headerSearchSuggestions[suggestionIdx] || "Ayurvedic remedies"}"`}
+                  className="w-full bg-[#f8faf5] border border-neutral-200 rounded-full py-1.5 pl-8 pr-8 text-xs text-neutral-800 placeholder:text-neutral-400 outline-none focus:border-[#023915] transition"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setIsSearching(false);
+                      setMobileSearchOpen(false);
+                    }}
+                    className="absolute right-2.5 p-0.5 text-neutral-400 hover:text-neutral-700"
+                  >
+                    <X className="size-3.5" />
+                  </button>
                 )}
-              </div>
-            )}
-          </div>
-        </div>
+              </form>
 
-        {/* Mobile Pincode Delivery Strip */}
-        <div className="flex items-center justify-between border-t border-neutral-200 bg-[#f5f5f5] px-4 py-2 lg:hidden">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-neutral-800">
-            <MapPin className="size-3.5 text-[#023915]" />
-            <span>{verifiedPincode ? `Delivery to ${verifiedPincode}` : "Verify pincode for delivery"}</span>
+              {/* Live Search Results Dropdown */}
+              {isSearching && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-96 overflow-y-auto rounded-xl border border-neutral-200 bg-white shadow-xl">
+                  {searchResults.length > 0 ? (
+                    <div className="divide-y divide-neutral-100">
+                      <div className="flex items-center justify-between bg-neutral-50 px-4 py-2 text-xs font-bold text-[#023915]">
+                        <span>Found {searchResults.length} matching remedies</span>
+                        <Link
+                          href={`/search?q=${encodeURIComponent(searchQuery)}`}
+                          onClick={() => {
+                            setIsSearching(false);
+                            setMobileSearchOpen(false);
+                          }}
+                          className="text-[11px] font-semibold text-[#80a03c] hover:underline"
+                        >
+                          View all →
+                        </Link>
+                      </div>
+                      {searchResults.map((product) => (
+                        <Link
+                          key={product.id}
+                          href={`/products/${product.slug || product.id}`}
+                          onClick={() => {
+                            setSearchQuery("");
+                            setIsSearching(false);
+                            setMobileSearchOpen(false);
+                          }}
+                          className="flex cursor-pointer items-center gap-3 p-3 transition hover:bg-neutral-50"
+                        >
+                          <Image
+                            src={product.image}
+                            alt={product.name}
+                            width={48}
+                            height={48}
+                            className="size-12 rounded object-contain shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h4 className="truncate text-xs font-bold text-neutral-900">
+                              {product.name}
+                            </h4>
+                            <div className="flex items-center gap-2 text-xs text-neutral-500 mt-0.5">
+                              <span className="font-bold text-[#023915]">₹{product.price}</span>
+                              {product.compareAt > product.price && (
+                                <span className="line-through text-[11px]">₹{product.compareAt}</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleItemQuantityChange(product.id, 1);
+                            }}
+                            className="rounded-full bg-[#023915] px-3 py-1 text-xs font-bold text-white transition hover:bg-black shrink-0"
+                          >
+                            ADD
+                          </button>
+                        </Link>
+                      ))}
+                      <div className="bg-neutral-50 p-2.5 text-center">
+                        <Link
+                          href={`/search?q=${encodeURIComponent(searchQuery)}`}
+                          onClick={() => {
+                            setIsSearching(false);
+                            setMobileSearchOpen(false);
+                          }}
+                          className="text-xs font-bold text-[#023915] hover:underline"
+                        >
+                          View all {searchResults.length} results for "{searchQuery}" →
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-5 text-center">
+                      <p className="text-xs font-medium text-neutral-600">
+                        No matching products found for "{searchQuery}"
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-          <button
-            onClick={() => setPincodeModalOpen(true)}
-            className="text-xs font-bold text-[#023915] underline cursor-pointer"
-          >
-            {verifiedPincode ? "Change" : "Verify"}
-          </button>
-        </div>
+        )}
       </header>
 
       {/* Drawer Navigation Menu */}

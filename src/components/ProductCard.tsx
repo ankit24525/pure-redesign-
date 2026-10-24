@@ -91,6 +91,15 @@ export default function ProductCard({ product, onAddToCart, onBuyNow }: ProductC
     <article className="group relative flex flex-col rounded-2xl border border-transparent p-2.5 sm:p-3 transition-all duration-300 bg-white hover:border-neutral-200 hover:shadow-md">
       {/* Product Image Container */}
       <div className="relative aspect-square w-full overflow-hidden bg-white flex items-center justify-center">
+        {/* Promotional Badge */}
+        {product.badge && (
+          <div className="absolute top-2 left-2 z-10 pointer-events-none">
+            <span className="inline-block bg-[#023915] text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-xs">
+              {product.badge}
+            </span>
+          </div>
+        )}
+
         <Link
           href={`/products/${product.slug}`}
           className="size-full flex items-center justify-center"
@@ -106,9 +115,9 @@ export default function ProductCard({ product, onAddToCart, onBuyNow }: ProductC
           />
         </Link>
 
-        {/* Image Slider Navigation Arrows (Shown on Hover, Bottom Right) */}
+        {/* Image Slider Navigation Arrows (Shown on Hover on Desktop, Hidden on Mobile) */}
         {imageList.length > 1 && (
-          <div className="absolute bottom-2.5 right-2.5 z-10 flex items-center gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto max-md:opacity-100 max-md:pointer-events-auto transition-opacity duration-200">
+          <div className="absolute bottom-2.5 right-2.5 z-10 hidden md:flex items-center gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
             <button
               type="button"
               onClick={handlePrevImage}
@@ -161,7 +170,7 @@ export default function ProductCard({ product, onAddToCart, onBuyNow }: ProductC
           <button
             type="button"
             onClick={handleAddToCartClick}
-            className={`w-full rounded-lg border border-[#023915] text-[#023915] hover:bg-[#023915] hover:text-white py-2 text-xs font-semibold tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto max-md:opacity-100 max-md:pointer-events-auto ${
+            className={`w-full rounded-xl border border-[#023915] text-[#023915] hover:bg-[#023915] hover:text-white py-2.5 text-xs font-bold tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto max-md:opacity-100 max-md:pointer-events-auto ${
               addedToast ? "bg-[#023915] text-white" : "bg-white"
             }`}
           >

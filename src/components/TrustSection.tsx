@@ -11,8 +11,8 @@ export default function TrustSection() {
     },
     {
       icon: Shield,
-      title: "Manufactured at an AYUSH GMP-Licensed Facility",
-      desc: "Our formulations are made at a facility that follows Ministry of AYUSH GMP standards.",
+      title: "AYUSH & GMP Certified",
+      desc: "Manufactured in a certified facility adhering to classical Shastra standards.",
     },
     {
       icon: Leaf,
@@ -22,35 +22,43 @@ export default function TrustSection() {
     {
       icon: Beaker,
       title: "Clinically Formulated",
-      desc: "Back by modern clinical trials and ancient 5,000-year-old Charaka Samhita texts.",
+      desc: "Backed by modern clinical safety trials and 5,000-year-old Charaka Samhita texts.",
     },
   ];
 
   return (
-    <section id="trust" className="bg-[#f8f9fa] border-y border-neutral-200/80 py-12">
+    <section id="trust" className="bg-white py-8 sm:py-12 border-b border-neutral-200/80">
       <div className="mx-auto max-w-[1440px] px-4 md:px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <h2 className="text-xl font-bold uppercase tracking-wide text-neutral-900 sm:text-2xl">
-            Why Pure Ayur Herbs?
-          </h2>
-          <p className="mt-2 text-xs font-medium text-neutral-600 md:text-sm">
-            Bridging ancient Ayurvedic wisdom with modern clinical research for purity you can taste & feel.
-          </p>
+        {/* Editorial Brand Trust Banner (Why Pure Ayur Herbs?) */}
+        <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-200/90 shadow-xs bg-neutral-900">
+          <img
+            src="/brand/why-pure-ayur-banner.jpg"
+            alt="Why Pure Ayur Herbs? - Bridging Ancient Ayurvedic Wisdom with Modern Clinical Research"
+            className="w-full h-auto object-cover object-center"
+            loading="lazy"
+          />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* 4-Pillar Companion Callout Badges (Hidden on mobile view, visible on desktop/tablet) */}
+        <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6">
           {pillars.map((item, idx) => {
             const IconComponent = item.icon;
             return (
               <div
                 key={idx}
-                className="flex flex-col items-center text-center p-6 rounded-xl bg-white border border-neutral-200/80 shadow-2xs transition hover:shadow-xs"
+                className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-3 p-4 sm:p-5 rounded-2xl bg-[#f8f9fa] border border-neutral-200/70"
               >
-                <div className="flex size-12 items-center justify-center rounded-full bg-[#c2d4c5]/40 text-[#023915] mb-4">
-                  <IconComponent className="size-6" />
+                <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-100/70 text-[#023915] shrink-0">
+                  <IconComponent className="size-5" />
                 </div>
-                <h3 className="text-sm font-bold text-neutral-900">{item.title}</h3>
-                <p className="mt-2 text-xs leading-relaxed text-neutral-600">{item.desc}</p>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-bold text-neutral-900 leading-snug">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1 text-[11px] sm:text-xs text-neutral-600 leading-relaxed hidden sm:block">
+                    {item.desc}
+                  </p>
+                </div>
               </div>
             );
           })}

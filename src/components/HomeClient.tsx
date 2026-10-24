@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import AnnouncementBar from "@/components/AnnouncementBar";
 import SiteHeader from "@/components/SiteHeader";
@@ -12,6 +12,7 @@ import DoctorConsultationBanner from "@/components/DoctorConsultationBanner";
 import AyurvedicQuizModal from "@/components/AyurvedicQuizModal";
 import AboutSection from "@/components/AboutSection";
 import TestimonialsSection from "@/components/TestimonialsSection";
+import RecentlyViewedSection from "@/components/RecentlyViewedSection";
 import SiteFooter from "@/components/SiteFooter";
 import MarketingBannerStrip from "@/components/MarketingBannerStrip";
 import MarketingPopup from "@/components/MarketingPopup";
@@ -321,6 +322,27 @@ export default function HomeClient({
       })
     : catalog;
 
+  // Fresh Arrivals: Always exactly 6 products, sorted newer to older (newest first)
+  const freshArrivalsProducts = useMemo(() => {
+    if (!catalog || catalog.length === 0) return [];
+    const sorted = [...catalog].sort((a: any, b: any) => {
+      if (a.createdAt && b.createdAt) {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      const numA = parseInt(String(a.id).replace(/\D/g, ""), 10);
+      const numB = parseInt(String(b.id).replace(/\D/g, ""), 10);
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+        return numB - numA;
+      }
+      return 0;
+    });
+
+    if (sorted.length > 1 && sorted[0]?.id === catalog[0]?.id) {
+      return [...catalog].reverse().slice(0, 6);
+    }
+    return sorted.slice(0, 6);
+  }, [catalog]);
+
   return (
     <main className="min-h-screen bg-white text-neutral-900">
       {/* Top Announcement Ticker Bar */}
@@ -414,10 +436,12 @@ export default function HomeClient({
           )
         ) : (
           <>
-            {/* 1. FRESH ARRIVALS Rail (Taitva Style) */}
+            {/* 1. FRESH ARRIVALS Rail: Always exactly 6 products, sorted newer to older, in grid (never slider) */}
             <ProductRail
               title="FRESH ARRIVALS"
-              items={catalog}
+              subtitle="Recently formulated 100% natural Ayurvedic remedies"
+              items={freshArrivalsProducts}
+              disableMobileSlider={true}
               onAddToCart={handleAddToCart}
               onBuyNow={handleBuyNow}
             />
@@ -429,9 +453,11 @@ export default function HomeClient({
 
             {/* 2. Dynamic Rails for every category with active products */}
             {categories.map((cat: any) => {
-              const catProducts = catalog.filter(
-                (p) => (p.concern || "").toLowerCase() === (cat.name || "").toLowerCase()
-              );
+              const catProducts = catalog.filter((p) => {
+                const pConcern = (p.concern || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+                const cName = (cat.name || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+                return pConcern === cName || pConcern.includes(cName) || cName.includes(pConcern);
+              });
               if (catProducts.length === 0) return null;
               return (
                 <ProductRail
@@ -474,6 +500,9 @@ export default function HomeClient({
       {isSectionVisible("healthQuiz") && (
         <AyurvedicQuizModal onAddToCart={handleAddToCart} />
       )}
+
+      {/* Recently Viewed Remedies */}
+      <RecentlyViewedSection />
 
       {/* Customer Reviews & Transformations */}
       {isSectionVisible("testimonials") && (

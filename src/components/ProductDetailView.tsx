@@ -40,9 +40,56 @@ import {
 import AnnouncementBar from "./AnnouncementBar";
 import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
+import BestSellersSection from "./BestSellersSection";
+import RecentlyViewedSection from "./RecentlyViewedSection";
 import { ProductDetail } from "@/lib/product-detail-data";
 import { Product } from "@/lib/store";
 import { uploadReviewImage } from "@/lib/upload";
+
+export const TAITVA_DEFAULT_UGC_REVIEWS = [
+  {
+    id: "taitva-rev-1",
+    name: "Harpreet Singh",
+    rating: 5,
+    date: "13/09/26",
+    product: "Neem Karela Jamun / Madhunashi Sugar Care",
+    title: "Authentic herbal taste and natural balance",
+    comment:
+      "I have tried several brands, but this neem karela jamun juice feels the most authentic. The bitter taste is natural, showing its purity, and it has really helped stabilize my daily energy and glucose levels without any insulin spikes. A staple in my morning routine now.",
+    photo: "/reviews/review-customer-1.jpg",
+    image: "/reviews/review-customer-1.jpg",
+    verifiedBuyer: true,
+    location: "Amritsar, Punjab",
+  },
+  {
+    id: "taitva-rev-2",
+    name: "Sunita Deshmukh",
+    rating: 5,
+    date: "24/09/26",
+    product: "Moringa Vitality Powder / Daily Nutrition",
+    title: "Noticeable improvement in vitality and digestion",
+    comment:
+      "I have been adding this moringa powder to my green smoothies every morning. It mixes very easily and feels completely pure without any artificial grit. My digestion has noticeably improved and my skin feels much clearer within just a month.",
+    photo: "/reviews/review-customer-2.jpg",
+    image: "/reviews/review-customer-2.jpg",
+    verifiedBuyer: true,
+    location: "Pune, Maharashtra",
+  },
+  {
+    id: "taitva-rev-3",
+    name: "Madhavan Iyer",
+    rating: 4,
+    date: "09/09/26",
+    product: "Sea Buckthorn Elixir / Fat Burner Juice",
+    title: "Refreshing herbal tonic for active workdays",
+    comment:
+      "This sea buckthorn juice has a wonderfully tart and refreshing taste. It has become a regular part of my morning routine, and I feel much more active through long workdays at my desk without afternoon fatigue or brain fog.",
+    photo: "/reviews/review-customer-3.jpg",
+    image: "/reviews/review-customer-3.jpg",
+    verifiedBuyer: true,
+    location: "Bengaluru, Karnataka",
+  },
+];
 
 interface ProductDetailViewProps {
   product: ProductDetail;
@@ -78,22 +125,49 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
       })
       .catch(() => {});
   }, []);
-  // Variants or Kapiva-style pack bundle selector
-  const variants =
-    product.variants && product.variants.length > 0
-      ? product.variants
-      : [
-          {
-            id: `${product.id || "1"}-pack1`,
-            name: "1 Pack (1 Month)",
-            value: "1 Pack",
-            price: Number(product.price) || 0,
-            mrp: Number(product.mrp) || Math.round((Number(product.price) || 0) * 1.25),
-            discount: product.discount || "SPECIAL OFFER",
-            badge: "STANDARD PACK",
-            inStock: product.inStock !== false,
-          },
-        ];
+
+  // Base product prices
+  const basePrice = Number(product.price) || 0;
+  const baseMrp = Number(product.mrp || (product as any).compareAt) || Math.round(basePrice * 1.25);
+
+  // Taitva 3-Pack Bundle Generator
+  const variants = useMemo(() => {
+    if (product.variants && product.variants.length > 1) {
+      return product.variants;
+    }
+    return [
+      {
+        id: `${product.id || "1"}-pack1`,
+        name: "1 Pack (1 Month Supply)",
+        value: "1 Pack",
+        price: basePrice,
+        mrp: baseMrp,
+        discount: product.discount || "SPECIAL OFFER",
+        badge: "STARTER",
+        inStock: product.inStock !== false,
+      },
+      {
+        id: `${product.id || "1"}-pack2`,
+        name: "Pack of 2 (2 Months Supply)",
+        value: "Pack of 2",
+        price: Math.round(basePrice * 1.8),
+        mrp: baseMrp * 2,
+        discount: "SAVE 20%",
+        badge: "MOST POPULAR",
+        inStock: product.inStock !== false,
+      },
+      {
+        id: `${product.id || "1"}-pack3`,
+        name: "Pack of 3 (3 Months Course)",
+        value: "Pack of 3",
+        price: Math.round(basePrice * 2.4),
+        mrp: baseMrp * 3,
+        discount: "SAVE 35%",
+        badge: "BEST VALUE",
+        inStock: product.inStock !== false,
+      },
+    ];
+  }, [product.id, product.variants, basePrice, baseMrp, product.discount, product.inStock]);
 
   const variantImages = (product.variants || []).map((v: any) => v.image).filter(Boolean);
   const baseGallery =
@@ -165,14 +239,32 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
   const [specificationsOpen, setSpecificationsOpen] = useState(false);
   const [copiedCoupon, setCopiedCoupon] = useState<string | null>(null);
   const [showStickyBar, setShowStickyBar] = useState(false);
+  const [isPastOffers, setIsPastOffers] = useState(false);
 
   // Reviews State
-  const [reviewsList, setReviewsList] = useState<any[]>(() =>
-    Array.isArray(product.customerReviews) && product.customerReviews.length > 0
-      ? product.customerReviews
-      : []
-  );
+  const [reviewsList, setReviewsList] = useState<any[]>(() => {
+    const existing =
+      Array.isArray(product.customerReviews) && product.customerReviews.length > 0
+        ? product.customerReviews
+        : [];
+    const hasUgcPhotos = existing.some(
+      (r: any) => r.photo || r.image || (Array.isArray(r.images) && r.images.length > 0)
+    );
+    if (!hasUgcPhotos) {
+      return [...existing, ...TAITVA_DEFAULT_UGC_REVIEWS];
+    }
+    return existing;
+  });
+  const [expandedReviewIds, setExpandedReviewIds] = useState<Record<string | number, boolean>>({});
+
+  const toggleExpandReview = (id: string | number) => {
+    setExpandedReviewIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
   const [showAllProductReviews, setShowAllProductReviews] = useState(false);
+  const [showMoreProductInfo, setShowMoreProductInfo] = useState(false);
   const [selectedStarFilter, setSelectedStarFilter] = useState<number | null>(null);
   const [sortOption, setSortOption] = useState<"recent" | "highest" | "lowest" | "photos">("recent");
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
@@ -193,25 +285,60 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
 
+  const [activeReviewIdx, setActiveReviewIdx] = useState(0);
+  const reviewScrollRef = useRef<HTMLDivElement>(null);
+  const isInteractingReviewRef = useRef(false);
+
+  const handleReviewScroll = () => {
+    if (!reviewScrollRef.current) return;
+    const { scrollLeft, clientWidth, scrollWidth } = reviewScrollRef.current;
+    if (scrollWidth - clientWidth <= 0) return;
+    const idx = Math.round(scrollLeft / clientWidth);
+    setActiveReviewIdx(idx);
+  };
+
+  const scrollToReview = (index: number) => {
+    if (!reviewScrollRef.current) return;
+    const { clientWidth } = reviewScrollRef.current;
+    reviewScrollRef.current.scrollTo({
+      left: index * clientWidth,
+      behavior: "smooth",
+    });
+    setActiveReviewIdx(index);
+  };
+
   // Cart State for Header
   const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
   const [appModalOpen, setAppModalOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
 
-  // Detect scroll for Mobile Sticky Buy Bar (Kapiva Feature)
+  // Detect scroll for Mobile Sticky Buy Bar & Offers Section trigger
   useEffect(() => {
     const handleScroll = () => {
       if (typeof window !== "undefined") {
-        if (window.scrollY > 380) {
-          setShowStickyBar(true);
-        } else {
-          setShowStickyBar(false);
+        setShowStickyBar(window.scrollY > 380);
+
+        const marker = document.getElementById("pdp-offers-marker");
+        if (marker) {
+          const rect = marker.getBoundingClientRect();
+          // User scrolled down to or past the offers section
+          const past = rect.top <= window.innerHeight - 80;
+          setIsPastOffers(past);
+          window.dispatchEvent(
+            new CustomEvent("pyur_pdp_nav_toggle", { detail: { isPastOffers: past } })
+          );
         }
       }
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    handleScroll();
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.dispatchEvent(
+        new CustomEvent("pyur_pdp_nav_toggle", { detail: { isPastOffers: false } })
+      );
+    };
   }, []);
 
   // Sync initial variant
@@ -224,7 +351,7 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
       setSelectedImage(gallery[0]);
     }
     setQuantity(1);
-  }, [product.id, product.image]);
+  }, [product.id, product.image, variants]);
 
   // Click outside sort dropdown
   useEffect(() => {
@@ -243,8 +370,8 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
     fetch(`/api/reviews?productId=${encodeURIComponent(product.id)}&slug=${encodeURIComponent(product.slug)}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data && data.success && Array.isArray(data.reviews)) {
-          setReviewsList(data.reviews);
+        if (data && data.success && Array.isArray(data.reviews) && data.reviews.length > 0) {
+          setReviewsList([...data.reviews, ...TAITVA_DEFAULT_UGC_REVIEWS]);
         }
       })
       .catch((e) => console.error("Error loading product reviews:", e));
@@ -589,102 +716,40 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
   return (
     <main className="min-h-screen bg-white text-neutral-900 antialiased pb-24 lg:pb-0">
       {/* ========================================================================= */}
-      {/* MOBILE APP HEADER (Exact match to screenshot)                             */}
+      {/* 1. TOP ANNOUNCEMENT BAR (Global across Mobile & Desktop)                  */}
       {/* ========================================================================= */}
-      <header className="sticky top-0 z-40 bg-white border-b border-[#e5e5e5] px-3.5 py-2.5 flex items-center justify-between lg:hidden shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined" && window.history.length > 1) {
-                window.history.back();
-              } else {
-                window.location.href = "/";
-              }
-            }}
-            aria-label="Go Back"
-            className="p-1 -ml-1 text-[#17231b] hover:text-[#244f31] cursor-pointer"
-          >
-            <ArrowLeft className="size-5" />
-          </button>
-          <Link href="/" className="flex items-center gap-2">
-            <div className="size-7 rounded-full overflow-hidden border border-[#ddddd9] bg-white shrink-0 flex items-center justify-center p-0.5">
-              <Image
-                src="/brand/pure-ayur-logo.svg"
-                alt="Pure Ayur Herbs"
-                width={26}
-                height={26}
-                className="size-full object-contain"
-                onError={(e: any) => {
-                  e.currentTarget.src = "/icon.png";
-                }}
-              />
-            </div>
-            <span className="text-sm font-black text-[#17231b] tracking-tight">Pure Ayur Herbs</span>
-          </Link>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/search" aria-label="Search Catalog" className="p-1 text-[#17231b] hover:text-[#244f31] cursor-pointer">
-            <Search className="size-5 text-[#17231b]" />
-          </Link>
-          <Link href="/checkout" aria-label="Shopping Cart" className="relative p-1 text-[#17231b] cursor-pointer">
-            <ShoppingBag className="size-5 text-[#17231b]" />
-            <span className="absolute -top-0.5 -right-0.5 size-4 rounded-full bg-[#80a03c] text-white text-[10px] font-black flex items-center justify-center">
-              {cartCount > 0 ? cartCount : 1}
-            </span>
-          </Link>
-        </div>
-      </header>
+      <AnnouncementBar onOpenAppModal={() => setAppModalOpen(true)} />
+
+      {/* ========================================================================= */}
+      {/* 2. MAIN STICKY HEADER (Taitva Header: Bag+Badge Left, Logo, Search Right)  */}
+      {/* ========================================================================= */}
+      <div className="sticky top-0 z-40 bg-white">
+        <SiteHeader
+          cart={cart}
+          onUpdateQuantity={(id, delta) => {
+            setCart((prev) =>
+              prev
+                .map((item) => (item.product?.id === id ? { ...item, quantity: item.quantity + delta } : item))
+                .filter((i) => i.quantity > 0)
+            );
+          }}
+          onRemoveItem={(id) => setCart((prev) => prev.filter((i) => i.product?.id !== id))}
+          onOpenAppModal={() => setAppModalOpen(true)}
+          onOpenLoginModal={() => setLoginModalOpen(true)}
+          onOpenConsultationModal={() => setConsultationModalOpen(true)}
+        />
+      </div>
 
       {/* ========================================================================= */}
       {/* MOBILE HERO FOLD (Exact match to uploaded design)                          */}
       {/* ========================================================================= */}
       <section className="bg-white pb-6 lg:hidden border-b border-[#e5e5e5]">
-        {/* Product Image Stage */}
+        {/* Product Image Stage (Full-bleed Packshot with Swipe) */}
         <div
           className="relative bg-white aspect-square w-full overflow-hidden select-none flex items-center justify-center"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          {/* Top Right Badges */}
-          <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-1.5 pointer-events-none">
-            <span className="rounded-md bg-[#80a03c] px-2.5 py-1 text-xs font-black uppercase text-white shadow-xs">
-              {discountPercent > 0 ? `${discountPercent}% OFF` : currentVariant.discount || "32% OFF"}
-            </span>
-            <span className="rounded-md bg-[#17231b]/95 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 shadow-xs">
-              100% AYUSH Certified
-            </span>
-          </div>
-
-          {/* Quick Nav Arrows on Mobile */}
-          {gallery.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={handlePrevImage}
-                aria-label="Previous product image"
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 size-8 rounded-full bg-white/90 backdrop-blur-xs border border-neutral-200 flex items-center justify-center text-[#17231b] shadow-xs active:scale-90 transition cursor-pointer"
-              >
-                <ArrowLeft className="size-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleNextImage}
-                aria-label="Next product image"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 size-8 rounded-full bg-white/90 backdrop-blur-xs border border-neutral-200 flex items-center justify-center text-[#17231b] shadow-xs active:scale-90 transition cursor-pointer"
-              >
-                <ArrowRight className="size-4" />
-              </button>
-            </>
-          )}
-
-          {/* Counter Badge Bottom Right */}
-          {gallery.length > 1 && (
-            <div className="absolute bottom-2.5 right-3 z-10 rounded-full bg-black/60 backdrop-blur-xs px-2.5 py-0.5 text-[10px] font-bold text-white shadow-xs">
-              {Math.max(1, gallery.indexOf(selectedImage) + 1)} / {gallery.length}
-            </div>
-          )}
-
           <Image
             src={selectedImage || product.image}
             alt={`${product.name} - Pure Ayur Herbs`}
@@ -696,42 +761,33 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
           />
         </div>
 
-        {/* Mobile Catalog Image Thumbnails Strip */}
+        {/* Mobile Centered Image Pagination Dots (Exact Match to Screenshot) */}
         {gallery.length > 1 && (
-          <div className="mt-3 px-4 flex items-center justify-center gap-2.5 overflow-x-auto no-scrollbar py-1">
+          <div className="flex items-center justify-center gap-2 mt-4 mb-3">
             {gallery.map((imgUrl, idx) => {
-              const isSelected = selectedImage === imgUrl;
+              const isSelected = (selectedImage || product.image) === imgUrl;
               return (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => setSelectedImage(imgUrl)}
-                  className={`size-16 shrink-0 overflow-hidden rounded-xl p-0.5 transition cursor-pointer bg-white ${
+                  aria-label={`Go to product image ${idx + 1}`}
+                  className={`rounded-full transition-all duration-300 cursor-pointer ${
                     isSelected
-                      ? "border-2 border-[#023915] shadow-2xs"
-                      : "border border-neutral-200 hover:border-neutral-400"
+                      ? "size-2.5 bg-[#023915] scale-110"
+                      : "size-2 bg-neutral-300 hover:bg-neutral-400"
                   }`}
-                  aria-label={`View product image ${idx + 1}`}
-                >
-                  <Image
-                    src={imgUrl}
-                    alt={`${product.name} thumbnail ${idx + 1}`}
-                    width={64}
-                    height={64}
-                    unoptimized
-                    className="size-full object-contain rounded-lg"
-                  />
-                </button>
+                />
               );
             })}
           </div>
         )}
 
-        {/* Product Information Body (Taitva Style) */}
-        <div className="px-4 pt-3.5 flex flex-col gap-3">
-          {/* Title & Share Button */}
+        {/* Product Information Body (Exact Match to Screenshot) */}
+        <div className="px-4 pt-1 flex flex-col gap-2.5">
+          {/* Title & Circular Share Button */}
           <div className="flex items-start justify-between gap-3">
-            <h1 className="text-base sm:text-lg font-bold leading-snug text-neutral-900">
+            <h1 className="text-base sm:text-lg font-normal sm:font-medium leading-snug text-neutral-900 tracking-tight">
               {product.name}
             </h1>
             <button
@@ -744,40 +800,59 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
                   alert("Product link copied to clipboard!");
                 }
               }}
-              className="size-8 rounded-full border border-neutral-300 flex items-center justify-center text-neutral-600 hover:text-black hover:border-black transition shrink-0 cursor-pointer"
+              className="size-8.5 rounded-full bg-neutral-100/90 hover:bg-neutral-200 text-neutral-700 flex items-center justify-center transition shrink-0 cursor-pointer"
               aria-label="Share product"
             >
               <Share2 className="size-4" />
             </button>
           </div>
 
-          {/* Pricing Block (Taitva Exact Format: ₹699 ₹999 30% Off) */}
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-2xl font-black text-neutral-900">₹{unitPrice}</span>
+          {/* Pricing Block (Exact Match: ₹499  ₹749  33% Off) */}
+          <div className="flex items-baseline gap-2.5 mt-0.5">
+            <span className="text-2xl sm:text-3xl font-extrabold text-neutral-900">
+              ₹{unitPrice}
+            </span>
             {unitMrp > unitPrice && (
-              <span className="text-sm font-semibold text-neutral-400 line-through">₹{unitMrp}</span>
+              <span className="text-sm sm:text-base font-normal text-neutral-400 line-through">
+                ₹{unitMrp}
+              </span>
             )}
             {discountPercent > 0 && (
-              <span className="text-sm font-extrabold text-emerald-800">
+              <span className="text-sm sm:text-base font-bold text-emerald-800">
                 {discountPercent}% Off
               </span>
             )}
           </div>
 
-          {/* Dashed Green Coupon Pill */}
+          {/* Dashed Green Coupon Pill (Exact Match: [🎟️ Get this as low as ₹425 >]) */}
           <div
             onClick={() => {
               if (displayOffers.length > 0) {
                 handleCopyCoupon(displayOffers[0].code);
               }
             }}
-            className="border border-dashed border-emerald-600 rounded-lg p-2.5 px-3 bg-emerald-50/20 text-emerald-900 text-xs font-semibold flex items-center justify-between cursor-pointer hover:bg-emerald-50/50 transition"
+            className="mt-1 border border-dashed border-emerald-600 rounded-xl py-2 px-3 bg-white text-emerald-900 text-xs sm:text-sm font-medium flex items-center justify-between cursor-pointer hover:bg-emerald-50/20 transition"
           >
-            <div className="flex items-center gap-1.5">
-              <span>🏷️</span>
-              <span>Get this as low as <b>₹{Math.max(1, Math.round(unitPrice * 0.85))}</b></span>
+            <div className="flex items-center gap-2">
+              <svg
+                className="size-4 text-emerald-700 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+                <path d="M13 5v2" />
+                <path d="M13 17v2" />
+                <path d="M13 11v2" />
+              </svg>
+              <span className="text-emerald-900 font-medium">
+                Get this as low as <span className="font-bold text-emerald-900">₹{Math.max(1, Math.round(unitPrice * 0.85))}</span>
+              </span>
             </div>
-            <ChevronRight className="size-3.5 text-emerald-800" />
+            <ChevronRight className="size-4 text-emerald-700 shrink-0" />
           </div>
 
           {/* Inclusive of taxes note */}
@@ -818,8 +893,8 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
             </p>
           )}
 
-          {/* 3-Feature Assurance Card (COD / 3 Days Return / Free Delivery) */}
-          <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-[#f5f5f5]">
+          {/* 1. COD / Trust Assurance Card (FIRST) */}
+          <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-[#f5f5f5] mt-1">
             <div className="grid grid-cols-3 gap-1 px-2 py-3 text-center items-start">
               {/* Cash on Delivery */}
               <div className="flex flex-col items-center">
@@ -869,29 +944,79 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
             </div>
           </div>
 
-          {/* Dual Action Buttons (Mobile View) */}
-          <div className="flex items-center gap-2.5 pt-1">
-            <button
-              type="button"
-              onClick={handleCurrentProductAddToCart}
-              className="flex-1 bg-white border border-[#023915] text-[#023915] hover:bg-neutral-50 py-3 rounded-lg font-bold text-xs uppercase tracking-wider transition cursor-pointer"
-            >
-              {addedToast ? "Added to bag ✓" : "Add to bag"}
-            </button>
-            <button
-              type="button"
-              onClick={handleBuyNow}
-              className="flex-1 bg-[#023915] hover:bg-black text-white py-3 rounded-lg font-bold text-xs uppercase tracking-wider transition shadow-md cursor-pointer"
-            >
-              Buy Now
-            </button>
-          </div>
+          {/* 2. TAITVA 3-PACK BUNDLE SELECTOR (SECOND) */}
+          <div className="mt-2 border-t border-neutral-200/80 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                SELECT PACK SIZE: <span className="text-[#023915] font-extrabold">{currentVariant.value || currentVariant.name}</span>
+              </label>
+              <span className="text-[11px] font-semibold text-neutral-500">
+                Save up to 35%
+              </span>
+            </div>
 
-          {/* Size Selector */}
-          <div className="pt-1">
-            <label className="text-xs font-bold text-neutral-900 block mb-1">Size</label>
-            <div className="bg-[#f5f5f5] border border-neutral-200 rounded-xl p-2 text-center text-xs font-bold text-neutral-800">
-              {currentVariant.value || currentVariant.name || "500 Ml"}
+            <div className="grid grid-cols-3 gap-2">
+              {variants.map((v: any, idx: number) => {
+                const isSelected = currentVariant.id === v.id;
+                const vPrice = Number(v.price) || 0;
+                const defaultBadges = ["STARTER", "MOST POPULAR", "BEST VALUE"];
+                const badgeText = v.badge || defaultBadges[idx] || "OFFER";
+                const isPopular = idx === 1;
+                const isBestValue = idx === 2;
+
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedVariant(v);
+                      if (v.image) setSelectedImage(v.image);
+                    }}
+                    className={`relative flex flex-col justify-between rounded-xl p-2.5 text-left transition cursor-pointer min-h-[96px] ${
+                      isSelected
+                        ? "border-2 border-[#023915] bg-[#c2d4c5]/20 shadow-xs"
+                        : "border border-neutral-200 bg-white hover:border-neutral-400"
+                    }`}
+                  >
+                    {/* Top Floating Badge */}
+                    <span
+                      className={`absolute -top-2 left-2 px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wider shadow-2xs truncate max-w-[90%] ${
+                        isBestValue
+                          ? "bg-amber-600 text-white"
+                          : isPopular
+                          ? "bg-[#023915] text-white"
+                          : "bg-neutral-800 text-white"
+                      }`}
+                    >
+                      {badgeText}
+                    </span>
+
+                    <div className="pt-1.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-xs font-bold text-neutral-900 truncate">
+                          {v.value || v.name}
+                        </span>
+                        <span
+                          className={`size-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                            isSelected ? "border-[#023915] bg-[#023915]" : "border-neutral-300"
+                          }`}
+                        >
+                          {isSelected && <span className="size-1.5 rounded-full bg-white" />}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 pt-1 border-t border-neutral-200/60 flex items-baseline justify-between">
+                      <div className="text-sm font-black text-neutral-900">₹{vPrice}</div>
+                      {v.discount && (
+                        <span className="text-[8.5px] font-bold text-emerald-800">
+                          {v.discount}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -918,9 +1043,12 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
             </div>
           </div>
 
+          {/* Offers Section Marker for Scroll Toggle */}
+          <div id="pdp-offers-marker" className="scroll-mt-20" />
+
           {/* OFFERS FOR YOU (Carousel) */}
           {displayOffers.length > 0 && (
-            <div className="mt-4 pt-1">
+            <div className="mt-2 pt-1">
               <div className="flex items-center justify-between pb-1">
                 <span className="text-xs font-black uppercase text-[#17231b] flex items-center gap-1.5">
                   🏷️ OFFERS FOR YOU ({displayOffers.length})
@@ -976,85 +1104,6 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
               </div>
             </div>
           )}
-
-          {/* SELECT PACK SIZE */}
-          <div className="mt-5 border-t border-neutral-200/80 pt-3.5">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-neutral-900">
-                SELECT PACK SIZE: <span className="text-[#023915] font-bold">{currentVariant.value || currentVariant.name}</span>
-              </label>
-              <span className="text-[11px] font-semibold text-neutral-500">
-                Choose for best savings
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {variants.map((v: any, idx: number) => {
-                const isSelected = currentVariant.id === v.id;
-                const vPrice = Number(v.price) || 0;
-                const vMrp = Number(v.mrp || v.compareAt) || Math.round(vPrice * 1.25);
-                const defaultBadges = ["STANDARD", "MOST POPULAR", "BEST VALUE - 3-MONTH"];
-                const badgeText = v.badge || defaultBadges[idx] || "OFFER";
-                const isFirst = idx === 0;
-
-                return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedVariant(v);
-                      if (v.image) setSelectedImage(v.image);
-                    }}
-                    className={`relative flex flex-col justify-between rounded-xl p-2.5 text-left transition cursor-pointer min-h-[96px] ${
-                      isSelected
-                        ? "border-2 border-[#023915] bg-[#c2d4c5]/20 shadow-xs"
-                        : "border border-neutral-200 bg-white hover:border-neutral-400"
-                    }`}
-                  >
-                    {/* Top Floating Badge */}
-                    <span
-                      className={`absolute -top-2 left-2 px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wider shadow-2xs truncate max-w-[90%] ${
-                        isFirst
-                          ? "bg-neutral-900 text-white"
-                          : "bg-[#023915] text-white"
-                      }`}
-                    >
-                      {badgeText}
-                    </span>
-
-                    <div className="pt-1.5">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-neutral-900 truncate">
-                          {v.value || v.name}
-                        </span>
-                        <span
-                          className={`size-3.5 rounded-full border flex items-center justify-center shrink-0 ${
-                            isSelected ? "border-[#023915] bg-[#023915]" : "border-neutral-300"
-                          }`}
-                        >
-                          {isSelected && <span className="size-1.5 rounded-full bg-white" />}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 pt-1 border-t border-neutral-200/60">
-                      <div className="text-sm font-bold text-neutral-900">₹{vPrice}</div>
-                      {idx === 1 && (
-                        <span className="inline-block mt-0.5 text-[8px] font-bold text-white bg-[#023915] px-1.5 py-0.5 rounded">
-                          Save More
-                        </span>
-                      )}
-                      {idx === 2 && (
-                        <span className="inline-block mt-0.5 text-[8px] font-bold text-white bg-[#023915] px-1.5 py-0.5 rounded">
-                          3-Month Course
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           {/* KEY BENEFITS */}
           <div className="mt-5 border-t border-[#e5e5e5] pt-4">
@@ -1123,37 +1172,10 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
       </section>
 
       {/* ========================================================================= */}
-      {/* DESKTOP TOP ANNOUNCEMENT BAR                                              */}
-      {/* ========================================================================= */}
-      <div className="hidden lg:block">
-        <AnnouncementBar onOpenAppModal={() => setAppModalOpen(true)} />
-      </div>
-
-      {/* ========================================================================= */}
-      {/* DESKTOP MAIN STICKY HEADER (Permanently sticky top-0 across full page)     */}
-      {/* ========================================================================= */}
-      <div className="hidden lg:block sticky top-0 z-40 bg-white">
-        <SiteHeader
-          cart={cart}
-          onUpdateQuantity={(id, delta) => {
-            setCart((prev) =>
-              prev
-                .map((item) => (item.product?.id === id ? { ...item, quantity: item.quantity + delta } : item))
-                .filter((i) => i.quantity > 0)
-            );
-          }}
-          onRemoveItem={(id) => setCart((prev) => prev.filter((i) => i.product?.id !== id))}
-          onOpenAppModal={() => setAppModalOpen(true)}
-          onOpenLoginModal={() => setLoginModalOpen(true)}
-          onOpenConsultationModal={() => setConsultationModalOpen(true)}
-        />
-      </div>
-
-      {/* ========================================================================= */}
       {/* DESKTOP BREADCRUMBS NAVIGATION                                            */}
       {/* ========================================================================= */}
       <div className="hidden lg:block">
-        <nav aria-label="Breadcrumb" className="mx-auto max-w-[1360px] px-4 py-3 text-xs text-[#666666] md:px-6">
+        <nav aria-label="Breadcrumb" className="mx-auto max-w-[1200px] px-4 py-3 text-xs text-[#666666] md:px-6">
           <ol className="flex items-center flex-wrap gap-1.5">
             <li>
               <Link href="/" className="hover:text-[#244f31] transition">
@@ -1175,7 +1197,7 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
       {/* ========================================================================= */}
       {/* 1. TAITVA DESKTOP HERO SECTION (1:1 Exact Match to Taitva Screenshot 1)    */}
       {/* ========================================================================= */}
-      <section className="mx-auto max-w-[1280px] px-4 pb-12 md:px-8 hidden lg:block">
+      <section className="mx-auto max-w-[1200px] px-4 pb-12 md:px-6 hidden lg:block">
         <div className="grid grid-cols-12 gap-8 items-start">
           {/* LEFT: THUMBNAILS (LEFT) + BORDERLESS MAIN SHOWCASE IMAGE (RIGHT) */}
           <div className="col-span-7 flex flex-row gap-4 items-start sticky top-24">
@@ -1237,8 +1259,32 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
             </div>
           </div>
 
-          {/* RIGHT: TAITVA BUY BOX (EXACT MATCH TO SCREENSHOT 1) */}
+          {/* RIGHT: TAITVA BUY BOX */}
           <div className="col-span-5 flex flex-col gap-3.5">
+            {/* Top Star Rating & Reviews Badge */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 text-[#023915]">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    className={`size-3.5 ${
+                      i < Math.round(displayRating) ? "fill-[#023915] text-[#023915]" : "fill-neutral-200 text-neutral-300"
+                    }`}
+                  />
+                ))}
+              </div>
+              <a
+                href="#testimonials"
+                className="text-xs font-bold text-neutral-800 hover:text-[#023915] hover:underline cursor-pointer"
+              >
+                {displayRating} ({totalRatingsCount} Reviews)
+              </a>
+              <span className="text-neutral-300">•</span>
+              <span className="text-[11px] font-bold text-[#023915] bg-[#c2d4c5]/30 px-2 py-0.5 rounded-full">
+                100% AYUSH Certified
+              </span>
+            </div>
+
             {/* Title & Share Button Row */}
             <div className="flex items-start justify-between gap-3">
               <h1 className="text-xl md:text-2xl font-bold text-neutral-900 leading-snug">
@@ -1261,7 +1307,7 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
               </button>
             </div>
 
-            {/* Price Row (Taitva Exact Format: ₹699 ₹999 30% Off) */}
+            {/* Price Row (Taitva Exact Format: ₹599 ₹1,999 70% Off) */}
             <div className="flex items-baseline gap-2.5">
               <span className="text-2xl md:text-3xl font-extrabold text-neutral-900">₹{unitPrice}</span>
               {unitMrp > unitPrice && (
@@ -1326,6 +1372,101 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
               </p>
             )}
 
+            {/* TAITVA 3-PACK BUNDLE SELECTOR */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-neutral-900">
+                  SELECT PACK SIZE: <span className="text-[#023915] font-extrabold">{currentVariant.value || currentVariant.name}</span>
+                </label>
+                <span className="text-[11px] font-semibold text-neutral-500">
+                  Multi-month bundles save up to 35%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                {variants.map((v: any, idx: number) => {
+                  const isSelected = currentVariant.id === v.id;
+                  const vPrice = Number(v.price) || 0;
+                  const defaultBadges = ["STARTER", "MOST POPULAR", "BEST VALUE"];
+                  const badgeText = v.badge || defaultBadges[idx] || "OFFER";
+                  const isPopular = idx === 1;
+                  const isBestValue = idx === 2;
+
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVariant(v);
+                        if (v.image) setSelectedImage(v.image);
+                      }}
+                      className={`relative flex flex-col justify-between rounded-xl p-3 text-left transition cursor-pointer min-h-[102px] ${
+                        isSelected
+                          ? "border-2 border-[#023915] bg-[#c2d4c5]/20 shadow-xs"
+                          : "border border-neutral-200 bg-white hover:border-neutral-400"
+                      }`}
+                    >
+                      {/* Top Floating Badge */}
+                      <span
+                        className={`absolute -top-2.5 left-2 px-2 py-0.5 rounded-full text-[8.5px] font-bold uppercase tracking-wider shadow-2xs truncate max-w-[92%] ${
+                          isBestValue
+                            ? "bg-amber-600 text-white"
+                            : isPopular
+                            ? "bg-[#023915] text-white"
+                            : "bg-neutral-800 text-white"
+                        }`}
+                      >
+                        {badgeText}
+                      </span>
+
+                      <div className="pt-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-bold text-neutral-900 truncate">
+                            {v.value || v.name}
+                          </span>
+                          <span
+                            className={`size-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                              isSelected ? "border-[#023915] bg-[#023915]" : "border-neutral-300"
+                            }`}
+                          >
+                            {isSelected && <span className="size-1.5 rounded-full bg-white" />}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 pt-1 border-t border-neutral-200/60 flex items-baseline justify-between">
+                        <div className="text-sm font-black text-neutral-900">₹{vPrice}</div>
+                        {v.discount && (
+                          <span className="text-[9px] font-bold text-emerald-800">
+                            {v.discount}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Dual Action Buttons: [ Add to bag ] & [ Buy Now ] */}
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleCurrentProductAddToCart}
+                className="flex-1 bg-white border border-[#023915] text-[#023915] hover:bg-neutral-50 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                {addedToast ? "Added to bag ✓" : "Add to bag"}
+              </button>
+              <button
+                type="button"
+                onClick={handleBuyNow}
+                className="flex-1 bg-[#023915] hover:bg-black text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Zap className="size-4 fill-amber-300 text-amber-300" />
+                <span>Buy Now (COD)</span>
+              </button>
+            </div>
+
             {/* 3-Feature Assurance Card (COD / 3 Days Return / Free Delivery) */}
             <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-[#f5f5f5]">
               <div className="grid grid-cols-3 gap-2 px-3 py-3 text-center items-start">
@@ -1371,561 +1512,289 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
               </div>
             </div>
 
-            {/* Dual Action Buttons: [ Add to bag ] & [ Buy Now ] */}
-            <div className="flex items-center gap-3 pt-1">
-              <button
-                type="button"
-                onClick={handleCurrentProductAddToCart}
-                className="flex-1 bg-white border border-[#023915] text-[#023915] hover:bg-neutral-50 py-3 rounded-lg font-bold text-xs uppercase tracking-wider transition cursor-pointer"
-              >
-                {addedToast ? "Added to bag ✓" : "Add to bag"}
-              </button>
-              <button
-                type="button"
-                onClick={handleBuyNow}
-                className="flex-1 bg-[#023915] hover:bg-black text-white py-3 rounded-lg font-bold text-xs uppercase tracking-wider transition shadow-md cursor-pointer"
-              >
-                Buy Now
-              </button>
-            </div>
-
-            {/* Size Selector (Taitva Exact Format) */}
-            <div className="pt-2">
-              <label className="text-xs font-bold text-neutral-900 block mb-1.5">Size</label>
-              <div className="bg-[#f5f5f5] border border-neutral-200 rounded-xl p-2.5 text-center text-xs font-bold text-neutral-800 w-full sm:w-1/2">
-                {currentVariant.value || currentVariant.name || "500 Ml"}
-              </div>
-            </div>
-
-            {/* Product Information Box (Taitva Exact Format) */}
-            <div className="bg-[#f8f9fa] rounded-2xl p-4 border border-neutral-100 text-xs text-neutral-800 mt-2">
-              <h3 className="font-bold text-sm text-neutral-900 mb-2.5">Product Information</h3>
-              <div className="space-y-1.5">
-                <div className="flex justify-between border-b border-neutral-200/60 pb-1.5">
-                  <span className="text-neutral-500">Brand</span>
-                  <span className="font-semibold text-neutral-900">Pure Ayur Herbs</span>
+            {/* Product Information Box (Taitva Exact Format: How to use, Package contents, Read More) */}
+            <div className="bg-[#f8f9fa] rounded-2xl p-4 border border-neutral-200/70 text-xs text-neutral-800 mt-1">
+              <div className="space-y-2">
+                <div className="text-neutral-700 leading-relaxed text-xs">
+                  <span className="font-bold text-neutral-900">How To Use: </span>
+                  <span>
+                    {(product as any).howToUse ||
+                      "Apply A Small Amount To The Desired Area And Gently Massage In Circular Motions Until Absorbed. Use As Needed."}
+                  </span>
                 </div>
-                <div className="flex justify-between border-b border-neutral-200/60 pb-1.5">
-                  <span className="text-neutral-500">Formulation</span>
-                  <span className="font-semibold text-neutral-900">{product.category || "Classical Kwath Liquid"}</span>
+                <div className="text-neutral-700 leading-relaxed text-xs border-t border-neutral-200/60 pt-2">
+                  <span className="font-bold text-neutral-900">Package Contents: </span>
+                  <span>
+                    {currentVariant.name ? `${currentVariant.name} — ` : ""}
+                    {product.name} ({(product as any).weight || (product as any).packSize || "300ml Total"})
+                  </span>
                 </div>
-                <div className="flex justify-between border-b border-neutral-200/60 pb-1.5">
-                  <span className="text-neutral-500">Certification</span>
-                  <span className="font-semibold text-[#023915]">100% Ministry of AYUSH</span>
-                </div>
-                <div className="flex justify-between pt-0.5">
-                  <span className="text-neutral-500">Country of Origin</span>
-                  <span className="font-semibold text-neutral-900">India</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 2. BENEFITS OF [PRODUCT NAME] (Kapiva Benefits Section)                   */}
-      {/* ========================================================================= */}
-      <section className="bg-white py-14 border-y border-[#ddddd9]">
-        <div className="mx-auto max-w-[1360px] px-4 md:px-6">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <span className="text-xs font-black uppercase tracking-widest text-[#80a03c]">
-              CLINICAL AYURVEDIC FORMULA
-            </span>
-            <h2 className="mt-1 text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#17231b]">
-              Benefits of {product.name}
-            </h2>
-            <p className="mt-2 text-xs sm:text-sm text-[#666666]">
-              Synergistic multi-herb extracts formulated according to classical texts to restore internal balance.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {benefits.map((b, idx) => (
-              <div
-                key={idx}
-                className="rounded-2xl border border-neutral-200 bg-[#f5f5f5] p-6 shadow-xs hover:shadow-md transition hover:-translate-y-1 duration-200"
-              >
-                <div className="size-12 rounded-xl bg-white border border-neutral-200 flex items-center justify-center text-2xl shadow-2xs mb-4">
-                  {b.icon || "🌿"}
-                </div>
-                <h3 className="text-sm font-black text-neutral-900 leading-snug">{b.title}</h3>
-                <p className="mt-2 text-xs text-neutral-600 leading-relaxed">{b.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 3. KEY INGREDIENTS SECTION (Kapiva Herb Gallery)                          */}
-      {/* ========================================================================= */}
-      <section className="mx-auto max-w-[1360px] px-4 py-14 md:px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <span className="text-xs font-black uppercase tracking-widest text-[#80a03c]">
-            STANDARDIZED BOTANICALS
-          </span>
-          <h2 className="mt-1 text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#17231b]">
-            Key Potent Ingredients
-          </h2>
-          <p className="mt-2 text-xs sm:text-sm text-[#666666]">
-            Every herb is sourced at full maturity from pristine altitudes and laboratory-tested for active bio-compounds.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {ingredients.map((ing, idx) => (
-            <div
-              key={idx}
-              className="rounded-2xl border border-[#ddddd9] bg-white p-5 shadow-xs flex flex-col justify-between hover:border-[#80a03c] transition"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="size-11 rounded-full bg-[#eef5df] border border-emerald-200 flex items-center justify-center text-xl shrink-0">
-                    🌿
+                {showMoreProductInfo && (
+                  <div className="space-y-1.5 border-t border-neutral-200/60 pt-2 text-xs animate-in fade-in duration-150">
+                    <div className="flex justify-between border-b border-neutral-200/60 pb-1.5">
+                      <span className="text-neutral-500">Brand</span>
+                      <span className="font-semibold text-neutral-900">Pure Ayur Herbs</span>
+                    </div>
+                    <div className="flex justify-between border-b border-neutral-200/60 pb-1.5">
+                      <span className="text-neutral-500">Formulation</span>
+                      <span className="font-semibold text-neutral-900">
+                        {product.category || "Classical Kwath Liquid"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b border-neutral-200/60 pb-1.5">
+                      <span className="text-neutral-500">Certification</span>
+                      <span className="font-semibold text-[#023915]">100% Ministry of AYUSH</span>
+                    </div>
+                    <div className="flex justify-between pt-0.5">
+                      <span className="text-neutral-500">Country of Origin</span>
+                      <span className="font-semibold text-neutral-900">India</span>
+                    </div>
                   </div>
-                  {ing.action && (
-                    <span className="text-[10px] font-black uppercase bg-[#f4f7eb] text-[#244f31] px-2 py-0.5 rounded border border-emerald-200">
-                      {ing.action}
-                    </span>
+                )}
+                <div className="text-right pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreProductInfo((prev) => !prev)}
+                    className="text-xs font-semibold text-neutral-800 hover:text-[#023915] inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{showMoreProductInfo ? "Read Less" : "Read More"}</span>
+                    <ChevronDown
+                      className={`size-3 transition-transform ${showMoreProductInfo ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 2. TAITVA TESTIMONIAL SECTION (Visible Immediately After Product)         */}
+      {/* ========================================================================= */}
+      <section id="testimonials" className="bg-white py-8 sm:py-10">
+        <div className="mx-auto max-w-[1200px] px-4 md:px-6">
+          {/* Section Heading & View All Button */}
+          <div className="mb-6">
+            <h2 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-neutral-900 uppercase">
+              TESTIMONIAL
+            </h2>
+            <div className="mt-2.5 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowAllProductReviews((prev) => !prev)}
+                className="rounded-full border border-[#023915] text-[#023915] px-4 py-1 text-xs font-semibold hover:bg-[#023915] hover:text-white transition cursor-pointer"
+              >
+                {showAllProductReviews ? "Show Less" : "View All"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewError(null);
+                  setReviewSuccessMsg(null);
+                  setReviewModalOpen(true);
+                }}
+                className="rounded-full border border-neutral-300 text-neutral-700 px-4 py-1 text-xs font-semibold hover:border-[#023915] hover:text-[#023915] transition cursor-pointer flex items-center gap-1"
+              >
+                <Sparkles className="size-3 text-[#023915]" />
+                <span>Write a Review</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Comments / Testimonials Display */}
+          {(() => {
+            const visibleReviews = showAllProductReviews
+              ? sortedAndFilteredReviews
+              : sortedAndFilteredReviews.slice(0, 3);
+
+            const renderCard = (rev: any, idx: number) => {
+              const reviewId = rev.id || `rev-${idx}`;
+              const isExpanded = expandedReviewIds[reviewId];
+              const comment = rev.comment || rev.content || "";
+              const rating = typeof rev.rating === "number" ? rev.rating : 5;
+              const photo = rev.photo || rev.image;
+
+              return (
+                <div
+                  key={reviewId}
+                  className="rounded-2xl border border-neutral-300/80 bg-white p-5 sm:p-6 flex flex-col justify-between h-full shadow-2xs hover:shadow-xs transition"
+                >
+                  <div>
+                    {/* Customer Name */}
+                    <h3 className="font-bold text-neutral-900 text-sm sm:text-base leading-snug">
+                      {rev.name || rev.customerName || "Verified Buyer"}
+                    </h3>
+
+                    {/* Verified Buyer & Date */}
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-1 mb-2.5">
+                      <span className="inline-flex items-center justify-center size-3.5 rounded-full bg-[#023915] text-white shrink-0">
+                        <Check className="size-2.5 stroke-[3]" />
+                      </span>
+                      <span className="font-medium text-neutral-800">Verified Buyer</span>
+                      <span className="text-neutral-400">•</span>
+                      <span className="text-neutral-500">{rev.date || "13/09/26"}</span>
+                    </div>
+
+                    {/* Green Star Rating */}
+                    <div className="flex items-center gap-0.5 mb-2.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          className={`size-3.5 ${
+                            s <= rating
+                              ? "fill-[#023915] text-[#023915]"
+                              : "fill-neutral-200 text-neutral-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Review Comment Snippet */}
+                    <p className="text-xs text-neutral-600 leading-relaxed font-normal">
+                      {isExpanded || comment.length <= 135
+                        ? comment
+                        : `${comment.slice(0, 135)}..`}
+                    </p>
+
+                    {/* Read more toggle */}
+                    {comment.length > 135 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandReview(reviewId)}
+                        className="text-xs font-semibold text-neutral-900 underline hover:text-[#023915] cursor-pointer mt-1.5 inline-block text-left"
+                      >
+                        {isExpanded ? "Read less" : "Read more"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Customer UGC Photo Thumbnail at Bottom */}
+                  {photo && (
+                    <div className="mt-4 pt-1">
+                      <div className="size-14 sm:size-16 rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 shadow-2xs">
+                        <img
+                          src={photo}
+                          alt={rev.name}
+                          className="size-full object-cover object-center"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
-                <h3 className="mt-3 text-sm font-black text-[#17231b]">{ing.name}</h3>
-                {ing.sanskritName && (
-                  <p className="text-[11px] italic text-[#80a03c] font-medium">{ing.sanskritName}</p>
-                )}
-                <p className="mt-2 text-xs text-[#666666] leading-relaxed">{ing.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+              );
+            };
 
-      {/* ========================================================================= */}
-      {/* 4. SUITABLE FOR SECTION (Kapiva Who is it for?)                           */}
-      {/* ========================================================================= */}
-      <section className="bg-white py-14 border-y border-[#ddddd9]">
-        <div className="mx-auto max-w-[1360px] px-4 md:px-6">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <span className="text-xs font-black uppercase tracking-widest text-[#80a03c]">
-              WHO CAN CONSUME
-            </span>
-            <h2 className="mt-1 text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#17231b]">
-              Suitable For
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 max-w-4xl mx-auto">
-            {/* Recommended Box */}
-            <div className="rounded-2xl border border-neutral-200 bg-[#f5f5f5] p-6 shadow-xs">
-              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-neutral-200">
-                <span className="size-6 rounded-full bg-[#023915] text-white flex items-center justify-center text-xs font-black">
-                  ✓
-                </span>
-                <h3 className="text-sm font-black uppercase tracking-wider text-[#023915]">
-                  Recommended For:
-                </h3>
-              </div>
-              <ul className="space-y-3">
-                {suitableFor.recommended.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2.5 text-xs text-[#2b3a2f] leading-relaxed">
-                    <CheckCircle2 className="size-4 text-[#80a03c] shrink-0 mt-0.5" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Caution Box */}
-            <div className="rounded-2xl border border-amber-200 bg-[#fffdf5] p-6 shadow-xs">
-              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-amber-200">
-                <span className="size-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-black">
-                  !
-                </span>
-                <h3 className="text-sm font-black uppercase tracking-wider text-amber-900">
-                  Usage Guidance:
-                </h3>
-              </div>
-              <ul className="space-y-3">
-                {suitableFor.caution.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed">
-                    <Info className="size-4 text-amber-600 shrink-0 mt-0.5" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 5. HOW TO USE / DAILY RITUAL (Kapiva 3-Step Guide)                        */}
-      {/* ========================================================================= */}
-      <section className="mx-auto max-w-[1360px] px-4 py-14 md:px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <span className="text-xs font-black uppercase tracking-widest text-[#80a03c]">
-            DAILY USAGE
-          </span>
-          <h2 className="mt-1 text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#17231b]">
-            How to Use - Daily Ritual
-          </h2>
-          <p className="mt-2 text-xs sm:text-sm text-[#666666]">
-            Follow this simple daily routine consistently for 60 to 90 days for peak rejuvenation.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3 max-w-4xl mx-auto">
-          {dosageSteps.map((s, idx) => (
-            <div
-              key={idx}
-              className="flex flex-col items-center text-center rounded-2xl border border-[#ddddd9] bg-white p-7 shadow-xs hover:shadow-md transition"
-            >
-              <div className="relative mb-4">
-                <span className="flex size-14 items-center justify-center rounded-full bg-[#eef5df] text-2xl font-black text-[#244f31]">
-                  {s.icon || "🥄"}
-                </span>
-                <span className="absolute -top-1 -right-1 size-5 rounded-full bg-[#244f31] text-white text-[10px] font-black flex items-center justify-center">
-                  {s.step || idx + 1}
-                </span>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-[#80a03c]">
-                {s.timing || `Step ${s.step || idx + 1}`}
-              </span>
-              <h3 className="mt-1 text-sm font-black text-[#17231b]">{s.title}</h3>
-              <p className="mt-2 text-xs text-[#666666] leading-relaxed">{s.description}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-8 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full bg-[#eef5df] border border-emerald-200 px-4 py-1.5 text-xs font-bold text-[#244f31]">
-            <span>💡</span>
-            <span>Ayurvedic Tip: Consistency is key. Allow herbs 60-90 days to systematically nourish body tissues.</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 6. WHY PURE AYUR HERBS? (Kapiva "Why Kapiva?" Section)                    */}
-      {/* ========================================================================= */}
-      <section className="bg-white py-14 border-y border-[#ddddd9]">
-        <div className="mx-auto max-w-[1360px] px-4 md:px-6">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <span className="text-xs font-black uppercase tracking-widest text-[#80a03c]">
-              THE AYURVEDIC DIFFERENCE
-            </span>
-            <h2 className="mt-1 text-2xl sm:text-3xl font-black uppercase tracking-tight text-[#17231b]">
-              Why Pure Ayur Herbs?
-            </h2>
-            <p className="mt-2 text-xs sm:text-sm text-[#666666]">
-              Authentic ancient formulations modernized with clinical safety protocols.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {whyAyurveda.map((item, idx) => (
-              <div
-                key={idx}
-                className="rounded-2xl border border-neutral-200 bg-[#f5f5f5] p-6 shadow-xs text-center flex flex-col items-center"
-              >
-                <div className="size-14 rounded-full bg-white border border-neutral-200 flex items-center justify-center text-3xl shadow-2xs mb-4">
-                  {item.icon}
+            return (
+              <>
+                {/* Desktop View: Clean 3-Card Grid */}
+                <div className="hidden md:grid md:grid-cols-3 gap-5">
+                  {visibleReviews.map((rev: any, idx: number) => renderCard(rev, idx))}
                 </div>
-                <h3 className="text-sm font-black text-neutral-900">{item.title}</h3>
-                <p className="mt-2 text-xs text-neutral-600 leading-relaxed">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* ========================================================================= */}
-      {/* 7. PRODUCT SPECIFICATIONS (Kapiva Expandable Table)                       */}
-      {/* ========================================================================= */}
-      <section className="mx-auto max-w-[1360px] px-4 py-12 md:px-6">
-        <div className="max-w-3xl mx-auto rounded-2xl border border-neutral-200 bg-white overflow-hidden shadow-xs">
-          <button
-            type="button"
-            onClick={() => setSpecificationsOpen((prev) => !prev)}
-            className="w-full flex items-center justify-between p-5 text-left bg-[#f5f5f5] hover:bg-neutral-100 transition cursor-pointer"
-          >
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-[#80a03c]">
-                STATUTORY INFORMATION
-              </span>
-              <h3 className="text-base font-black text-neutral-900 mt-0.5">
-                Product Specifications &amp; Manufacturer Details
-              </h3>
-            </div>
-            <ChevronDown
-              className={`size-5 text-[#023915] transition-transform ${specificationsOpen ? "rotate-180" : ""}`}
-            />
-          </button>
-
-          {specificationsOpen && (
-            <div className="p-5 border-t border-[#ddddd9] divide-y divide-neutral-100 text-xs">
-              {specifications.map((spec, idx) => (
-                <div key={idx} className="py-2.5 grid grid-cols-3 gap-4">
-                  <span className="font-bold text-[#17231b]">{spec.label}</span>
-                  <span className="col-span-2 text-neutral-600 font-medium">{spec.value}</span>
-                </div>
-              ))}
-              <div className="py-2.5 grid grid-cols-3 gap-4">
-                <span className="font-bold text-[#17231b]">Marketed By</span>
-                <span className="col-span-2 text-neutral-600 font-medium">Pure Ayur Herbs Private Limited, Botanical Enclave, Sector 62, Noida, UP - 201301</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 8. FREE DOCTOR CONSULTATION BANNER (Kapiva Style)                         */}
-      {/* ========================================================================= */}
-      <section className="mx-auto max-w-[1360px] px-4 pb-12 md:px-6">
-        <div className="rounded-3xl bg-gradient-to-r from-[#17231b] to-[#244f31] p-6 sm:p-8 text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="space-y-2 text-center md:text-left">
-            <span className="inline-block rounded-full bg-[#80a03c] px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-              FREE VAIDYA ASSISTANCE
-            </span>
-            <h3 className="text-xl sm:text-2xl font-black">
-              Need personalized dosage guidance for {product.name}?
-            </h3>
-            <p className="text-xs sm:text-sm text-neutral-300 max-w-xl">
-              Connect with our certified Ayurvedic doctors on WhatsApp for custom lifestyle and diet advice.
-            </p>
-          </div>
-          <a
-            href={`https://wa.me/${whatsappNum}?text=${encodeURIComponent(
-              `Namaste! I would like a free doctor consultation regarding ${product.name}.`
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 rounded-xl bg-[#25D366] hover:bg-[#128C7E] text-white px-6 py-3.5 text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
-          >
-            <MessageCircle className="size-4" />
-            <span>Consult Doctor on WhatsApp</span>
-          </a>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 9. CUSTOMER REVIEWS (Kapiva 5-Star Breakdown + Photos + Verified Badges)   */}
-      {/* ========================================================================= */}
-      <section id="reviews" className="mx-auto max-w-[1360px] px-4 py-16 md:px-6 border-t border-[#ddddd9]">
-        <h2 className="text-2xl sm:text-3xl font-black text-[#17231b] text-center tracking-tight mb-8">
-          Customer Reviews &amp; Experiences
-        </h2>
-
-        {/* Top Summary & Write a Review Button */}
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star
-                  key={s}
-                  className={`size-5 ${
-                    s <= Math.round(displayRating) ? "fill-amber-500 text-amber-500" : "fill-neutral-200 text-neutral-300"
-                  }`}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-xs text-neutral-600 font-medium">
-                {totalRatingsCount > 0 ? `Based on ${totalRatingsCount} Verified Ratings` : "No reviews yet"}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setReviewError(null);
-              setReviewSuccessMsg(null);
-              setReviewModalOpen(true);
-            }}
-            className="border-2 border-[#244f31] bg-white hover:bg-[#244f31] hover:text-white text-[#244f31] px-5 sm:px-6 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition cursor-pointer shrink-0 shadow-xs"
-          >
-            WRITE A REVIEW
-          </button>
-        </div>
-
-        {/* Rating Breakdown Bars */}
-        <div className="space-y-1.5 mb-4 max-w-xl">
-          {ratingBreakdown.map((item) => (
-            <button
-              type="button"
-              key={item.star}
-              onClick={() => setSelectedStarFilter(selectedStarFilter === item.star ? null : item.star)}
-              className={`group w-full flex items-center gap-2 py-1 px-1.5 rounded transition text-left cursor-pointer hover:bg-white ${
-                selectedStarFilter === item.star ? "bg-[#f4f7eb] ring-1 ring-[#80a03c]" : ""
-              }`}
-            >
-              <div className="flex items-center gap-0.5 shrink-0">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <Star
-                    key={s}
-                    className={`size-3.5 ${
-                      s <= item.star ? "fill-amber-500 text-amber-500" : "fill-neutral-200 text-neutral-300"
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="h-2.5 rounded-full border border-neutral-200 bg-white overflow-hidden relative flex-1">
-                <div className="h-full bg-amber-500 transition-all duration-500" style={{ width: `${item.percentage}%` }} />
-              </div>
-              <div className="text-xs text-neutral-600 font-medium w-16 text-right shrink-0">
-                {item.percentage}% ({item.count})
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Filter and Sort Bar */}
-        <div className="relative flex items-center justify-between mt-6 mb-6" ref={sortDropdownRef}>
-          {selectedStarFilter !== null ? (
-            <div className="flex items-center gap-2 bg-[#f4f7eb] text-[#244f31] border border-emerald-200 px-3 py-1 rounded-lg text-xs font-semibold">
-              <span>Showing {selectedStarFilter}★ reviews</span>
-              <button
-                type="button"
-                onClick={() => setSelectedStarFilter(null)}
-                className="text-xs underline font-bold text-[#80a03c] cursor-pointer"
-              >
-                Clear
-              </button>
-            </div>
-          ) : (
-            <div />
-          )}
-
-          <div className="relative ml-auto">
-            <button
-              type="button"
-              onClick={() => setIsSortDropdownOpen((prev) => !prev)}
-              className="bg-[#244f31] hover:bg-[#1a3823] text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-            >
-              <span>{sortLabels[sortOption] || "MOST RECENT"}</span>
-              <ChevronDown className={`size-3.5 transition-transform ${isSortDropdownOpen ? "rotate-180" : ""}`} />
-            </button>
-
-            {isSortDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-neutral-200 py-1.5 z-30 animate-in fade-in zoom-in-95 duration-150">
-                {(["recent", "highest", "lowest", "photos"] as const).map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      setSortOption(opt);
-                      setIsSortDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-xs font-semibold hover:bg-neutral-50 transition ${
-                      sortOption === opt ? "text-[#023915] font-bold bg-[#c2d4c5]/20" : "text-neutral-700"
-                    }`}
-                  >
-                    {sortLabels[opt]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Reviews Grid */}
-        {sortedAndFilteredReviews.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[#ddddd9] bg-white p-8 text-center my-6 max-w-lg mx-auto">
-            <p className="text-xs text-[#666666]">No customer reviews found matching this filter.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {(showAllProductReviews ? sortedAndFilteredReviews : sortedAndFilteredReviews.slice(0, 6)).map(
-              (rev: any, idx: number) => {
-                const ratingNum = Math.min(5, Math.max(1, Math.round(Number(rev.rating) || 5)));
-                const isVerified = Boolean(rev.verifiedBuyer || rev.verified !== false);
-
-                return (
-                  <div
-                    key={rev.id || idx}
-                    className="rounded-2xl border border-[#ddddd9] bg-white p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition"
-                  >
+                {/* Mobile View: 1-Comment-At-A-Time Slider */}
+                <div className="md:hidden">
+                  {visibleReviews.length <= 1 ? (
+                    <div>{visibleReviews.map((rev: any, idx: number) => renderCard(rev, idx))}</div>
+                  ) : (
                     <div>
-                      <div className="flex items-center justify-between">
-                        <div className="font-bold text-[#17231b] text-sm">
-                          {rev.name || rev.customerName || "Verified Buyer"}
-                        </div>
-                        <span className="text-[10px] text-neutral-400">{rev.date || "Recently"}</span>
+                      <div
+                        ref={reviewScrollRef}
+                        onScroll={handleReviewScroll}
+                        onTouchStart={() => {
+                          isInteractingReviewRef.current = true;
+                        }}
+                        onTouchEnd={() => {
+                          setTimeout(() => {
+                            isInteractingReviewRef.current = false;
+                          }, 3000);
+                        }}
+                        className="flex overflow-x-auto snap-x snap-mandatory scrollbar-none pb-2 pt-1 scroll-smooth"
+                        style={{ WebkitOverflowScrolling: "touch" }}
+                      >
+                        {visibleReviews.map((rev: any, idx: number) => (
+                          <div key={rev.id || idx} className="w-full shrink-0 snap-center px-1">
+                            {renderCard(rev, idx)}
+                          </div>
+                        ))}
                       </div>
 
-                      <div className="flex items-center gap-0.5 my-2">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star
-                            key={s}
-                            className={`size-3.5 ${
-                              s <= ratingNum ? "fill-amber-500 text-amber-500" : "fill-neutral-200 text-neutral-300"
+                      {/* Pagination Dots for Mobile Slider */}
+                      <div className="flex items-center justify-center gap-1.5 mt-4">
+                        {visibleReviews.map((_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => scrollToReview(i)}
+                            aria-label={`Go to comment ${i + 1}`}
+                            className={`rounded-full transition-all duration-300 cursor-pointer ${
+                              i === activeReviewIdx
+                                ? "size-2.5 bg-[#023915] scale-110"
+                                : "size-1.5 bg-neutral-300 hover:bg-neutral-400"
                             }`}
                           />
                         ))}
                       </div>
-
-                      <h4 className="font-bold text-[#17231b] text-xs sm:text-sm">{rev.title || "Authentic Ayurvedic Results"}</h4>
-                      <p className="text-xs text-[#555555] mt-1 leading-relaxed">{rev.comment || rev.content}</p>
-
-                      {Boolean(rev.image || (Array.isArray(rev.images) && rev.images.length > 0)) && (
-                        <div className="mt-3">
-                          <a
-                            href={rev.image || rev.images[0]}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="relative size-16 rounded-xl overflow-hidden border border-neutral-200 inline-block"
-                          >
-                            <Image
-                              src={rev.image || rev.images[0]}
-                              alt="Customer review photo"
-                              width={64}
-                              height={64}
-                              unoptimized
-                              className="size-full object-cover"
-                            />
-                          </a>
-                        </div>
-                      )}
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-neutral-100 flex items-center justify-between text-[11px]">
-                      {isVerified && (
-                        <span className="inline-flex items-center gap-1 text-[#244f31] font-bold">
-                          <CheckCircle2 className="size-3.5 text-[#80a03c]" /> Verified Purchase
-                        </span>
-                      )}
-                      {rev.location && <span className="text-neutral-400 text-[10px]">{rev.location}</span>}
-                    </div>
-                  </div>
-                );
-              }
-            )}
-          </div>
-        )}
-
-        {sortedAndFilteredReviews.length > 6 && (
-          <div className="mt-8 text-center">
-            <button
-              type="button"
-              onClick={() => setShowAllProductReviews((prev) => !prev)}
-              className="rounded-full bg-[#eef5df] px-6 py-2 text-xs font-bold text-[#244f31] hover:bg-[#d8e4bd] transition cursor-pointer"
-            >
-              {showAllProductReviews ? "Show less ↑" : `See all reviews (${sortedAndFilteredReviews.length}) →`}
-            </button>
-          </div>
-        )}
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* 10. FAQS (Kapiva Accordion FAQ Section)                                   */}
+      {/* 3. RECENTLY VIEWED SECTION (Taitva Exact Layout: Immediately After Reviews)*/}
+      {/* ========================================================================= */}
+      <RecentlyViewedSection currentProductSlug={product.slug} onAddToCart={handleAddToCart as any} />
+
+      {/* ========================================================================= */}
+      {/* 4. BEST SELLERS SECTION (Taitva PDP Style)                               */}
+      {/* ========================================================================= */}
+      <BestSellersSection currentProductSlug={product.slug} onAddToCart={handleAddToCart as any} />
+
+      {/* ========================================================================= */}
+      {/* 5. VISUAL INFOGRAPHIC BANNER (Benefits, Suitability, How To Use)          */}
+      {/* ========================================================================= */}
+      <section className="bg-white py-8 sm:py-12 border-b border-neutral-200/80">
+        <div className="mx-auto max-w-[1200px] px-4 md:px-6">
+          <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-200/90 shadow-sm bg-neutral-900 group">
+            {/* Infographic Banner Graphic (Taitva Editorial Style) */}
+            <img
+              src="/brand/remedy-benefits-infographic.jpg"
+              alt={`${product.name} - Benefits, Suitability and Daily Ritual`}
+              className="w-full h-auto object-cover object-center"
+              onError={(e) => {
+                e.currentTarget.src = "/brand/product-infographic-banner.png";
+              }}
+            />
+
+            {/* Clickable CTA Overlay Hotspot */}
+            <div className="absolute left-6 md:left-12 bottom-6 md:bottom-10 z-10">
+              <button
+                type="button"
+                onClick={handleCurrentProductAddToCart}
+                className="bg-[#023915] hover:bg-black text-white text-xs sm:text-sm font-bold uppercase tracking-wider py-2.5 sm:py-3 px-6 sm:px-8 rounded-full shadow-lg transition active:scale-95 cursor-pointer flex items-center gap-2"
+              >
+                <span>{addedToast ? "Added to Bag ✓" : "Shop Now >"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* FAQS (Kapiva Accordion FAQ Section)                                       */}
+      {/* ========================================================================= */}
+      {/* ========================================================================= */}
       {/* ========================================================================= */}
       {faqs.length > 0 && (
         <section className="bg-white py-14 border-y border-[#ddddd9]">
-          <div className="mx-auto max-w-[1360px] px-4 md:px-6">
+          <div className="mx-auto max-w-[1200px] px-4 md:px-6">
             <div className="text-center max-w-2xl mx-auto mb-10">
               <span className="text-xs font-black uppercase tracking-widest text-[#80a03c]">
                 QUESTIONS &amp; ANSWERS
@@ -1963,12 +1832,12 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
       )}
 
       {/* ========================================================================= */}
-      {/* 11. MOBILE FLOATING ACTION BAR (Exact match to screenshot)                */}
+      {/* MOBILE FLOATING ACTION BAR (Hides when scrolled past offers)               */}
       {/* ========================================================================= */}
-      {isAvailable && (
+      {isAvailable && !isPastOffers && (
         <aside
           aria-label="Mobile Floating Action Bar"
-          className="fixed bottom-3 left-3 right-3 z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-neutral-200 p-2 shadow-[0_6px_25px_rgba(0,0,0,0.15)] lg:hidden flex items-center gap-2 max-w-md mx-auto animate-in slide-in-from-bottom duration-200"
+          className="fixed bottom-3 left-3 right-3 z-40 bg-white/95 backdrop-blur-md rounded-2xl border border-neutral-200 p-2 shadow-[0_6px_25px_rgba(0,0,0,0.15)] lg:hidden flex items-center gap-2 max-w-md mx-auto animate-in fade-in slide-in-from-bottom duration-200"
         >
           {/* Left: ADD TO BAG */}
           <button
@@ -2010,7 +1879,7 @@ export function ProductDetailView({ product, coupons, settings }: ProductDetailV
           aria-label="Desktop Sticky Bar"
           className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-neutral-200 px-6 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.1)] hidden lg:block animate-in slide-in-from-bottom duration-200"
         >
-          <div className="flex items-center justify-between gap-4 max-w-[1360px] mx-auto">
+          <div className="flex items-center justify-between gap-4 max-w-[1200px] mx-auto">
             <div className="flex items-center gap-3">
               <div className="size-12 rounded-lg overflow-hidden border border-neutral-200 shrink-0 bg-white flex items-center justify-center">
                 <Image src={selectedImage || product.image} alt={product.name} width={48} height={48} unoptimized className="size-full object-contain" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import Image from "next/image";
 
 interface ConcernFilterProps {
   selectedConcern: string | null;
@@ -11,50 +11,60 @@ interface ConcernFilterProps {
 
 export const DEFAULT_HEALTH_GOALS = [
   {
-    id: "energy",
-    name: "Energy & Vitality",
-    concernKey: "Energy and Vitality",
-    image:
-      "https://res.cloudinary.com/dwadcfj3b/image/upload/c_pad,w_1000,h_1000,b_white,f_auto,q_auto/v1791381368/pure_ayur_herbs/products/hmlzvpwldh0zgunukmxk.jpg",
-  },
-  {
     id: "sugar",
-    name: "Sugar Care",
+    name: "Sugar Management",
     concernKey: "Sugar Management",
     image:
-      "https://res.cloudinary.com/dwadcfj3b/image/upload/c_pad,w_1000,h_1000,b_white,f_auto,q_auto/v1792547874/pure_ayur_herbs/products/cckewssua9abbelbyknf.webp",
+      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    id: "energy",
+    name: "Energy and Vitality",
+    concernKey: "Energy and Vitality",
+    image:
+      "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "fitness",
-    name: "Gym & Fitness",
+    name: "Gym and Fitness",
     concernKey: "Gym and Fitness",
     image:
-      "https://res.cloudinary.com/dwadcfj3b/image/upload/c_pad,w_1000,h_1000,b_white,f_auto,q_auto/v1791381366/pure_ayur_herbs/products/xemjcovn6mbh6edriszp.jpg",
+      "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "women",
-    name: "Women's Health",
+    name: "Womens Health",
     concernKey: "Womens Health",
     image:
-      "https://res.cloudinary.com/dwadcfj3b/image/upload/c_pad,w_1000,h_1000,b_white,f_auto,q_auto/v1791381367/pure_ayur_herbs/products/aux22j4iqo4xus6bbja4.jpg",
+      "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    id: "skin",
+    name: "Skin and Hair",
+    concernKey: "Skin and Hair",
+    image:
+      "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    id: "heart",
+    name: "Heart Health",
+    concernKey: "Heart Health",
+    image:
+      "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "liver",
     name: "Liver Care",
     concernKey: "Liver Care",
-    image: "/brand/karela-jamun.svg",
+    image:
+      "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80",
   },
   {
     id: "daily",
     name: "Daily Ayurveda",
     concernKey: "Daily Ayurveda",
-    image: "/brand/triphala-gut.svg",
-  },
-  {
-    id: "skin",
-    name: "Skin & Hair",
-    concernKey: "Skin and Hair",
-    image: "/brand/amla-glow.svg",
+    image:
+      "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=600&q=80",
   },
 ];
 
@@ -63,7 +73,7 @@ export default function ConcernFilter({
   onSelectConcern,
   categories,
 }: ConcernFilterProps) {
-  // Merge categories from props if valid, otherwise use rich defaults
+  // Merge categories from props if available, otherwise use curated health goals
   const baseItems = useMemo(() => {
     if (Array.isArray(categories) && categories.length >= 3) {
       return categories.map((cat: any) => {
@@ -75,11 +85,16 @@ export default function ConcernFilter({
               d.concernKey.toLowerCase() === (cat.name || "").toLowerCase()
           ) || DEFAULT_HEALTH_GOALS[0];
 
+        const isSmallIcon =
+          !cat.image ||
+          cat.image.includes("w=120") ||
+          cat.image.length < 5;
+
         return {
           id: cat.id || cat.name?.toLowerCase().replace(/\s+/g, "-"),
           name: cat.name || fallback.name,
           concernKey: cat.concernKey || cat.name || fallback.concernKey,
-          image: cat.image && typeof cat.image === "string" && cat.image.trim() ? cat.image : fallback.image,
+          image: isSmallIcon ? fallback.image : cat.image,
         };
       });
     }
@@ -94,297 +109,261 @@ export default function ConcernFilter({
     return [...baseItems, ...baseItems, ...baseItems];
   }, [baseItems, itemCount]);
 
-  // Start in the middle batch (index = itemCount)
+  // Start in middle batch
   const [currentIndex, setCurrentIndex] = useState(itemCount);
   const [isTransitioning, setIsTransitioning] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
 
-  // Sync index when itemCount changes
-  useEffect(() => {
-    setCurrentIndex(itemCount);
-  }, [itemCount]);
+  // Swipe / Drag tracking
+  const touchStartX = useRef<number | null>(null);
+  const mouseStartX = useRef<number | null>(null);
+  const isDragging = useRef<boolean>(false);
+  const dragDistance = useRef<number>(0);
+  const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const nextSlide = useCallback(() => {
-    if (itemCount <= 1) return;
+    if (itemCount <= 3) return;
     setIsTransitioning(true);
     setCurrentIndex((prev) => prev + 1);
   }, [itemCount]);
 
   const prevSlide = useCallback(() => {
-    if (itemCount <= 1) return;
+    if (itemCount <= 3) return;
     setIsTransitioning(true);
     setCurrentIndex((prev) => prev - 1);
   }, [itemCount]);
 
-  // Jump seamlessly at boundaries
+  // Seamless infinite loop boundary jump
   const handleTransitionEnd = (e?: React.TransitionEvent<HTMLDivElement>) => {
     if (e && e.target !== e.currentTarget) return;
-    if (itemCount <= 1) return;
+    if (itemCount <= 3) return;
 
     if (currentIndex >= itemCount * 2) {
-      // Reached end of 2nd batch -> snap back to 1st batch
       setIsTransitioning(false);
-      setCurrentIndex(itemCount);
+      setCurrentIndex((prev) => prev - itemCount);
     } else if (currentIndex < itemCount) {
-      // Slid before 1st batch -> snap forward to 2nd batch
       setIsTransitioning(false);
-      setCurrentIndex(itemCount * 2 - 1);
+      setCurrentIndex((prev) => prev + itemCount);
     }
   };
 
-  // Safety Watchdog: If transitionend is dropped by the browser, snap index safely
+  // Re-enable smooth transition after boundary jump
   useEffect(() => {
-    if (itemCount <= 1) return;
-    if (currentIndex >= itemCount * 2) {
-      const timer = setTimeout(() => {
-        setIsTransitioning(false);
-        setCurrentIndex(itemCount);
-      }, 620);
-      return () => clearTimeout(timer);
-    } else if (currentIndex < itemCount) {
-      const timer = setTimeout(() => {
-        setIsTransitioning(false);
-        setCurrentIndex(itemCount * 2 - 1);
-      }, 620);
-      return () => clearTimeout(timer);
+    if (!isTransitioning) {
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsTransitioning(true);
+        });
+      });
+      return () => cancelAnimationFrame(raf);
     }
-  }, [currentIndex, itemCount]);
+  }, [isTransitioning]);
 
-  // Pause when tab is inactive
+  // Auto-slide every 3.5 seconds
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.hidden) {
-        setIsPaused(true);
-      } else {
-        setIsPaused(false);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+    if (isPaused || itemCount <= 3) return;
 
-  // Autoplay (every 4.5s)
-  useEffect(() => {
-    if (itemCount <= 3 || isPaused) return;
-
-    const interval = setInterval(() => {
+    autoPlayTimerRef.current = setInterval(() => {
       nextSlide();
-    }, 4500);
+    }, 3500);
 
-    return () => clearInterval(interval);
-  }, [itemCount, isPaused, nextSlide]);
+    return () => {
+      if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
+    };
+  }, [isPaused, nextSlide, itemCount]);
 
-  const handleInteraction = () => {
-    setIsPaused(true);
-    const resumeTimer = setTimeout(() => {
-      setIsPaused(false);
-    }, 7000);
-    return () => clearTimeout(resumeTimer);
-  };
-
+  // Touch handlers
   const handleTouchStart = (e: React.TouchEvent) => {
-    handleInteraction();
+    setIsPaused(true);
     touchStartX.current = e.touches[0].clientX;
+    dragDistance.current = 0;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.touches[0].clientX;
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.touches[0].clientX;
+    dragDistance.current = Math.abs(diff);
   };
 
-  const handleTouchEnd = () => {
-    if (!touchStartX.current || !touchEndX.current) return;
-    const diffX = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 35;
-    if (diffX > minSwipeDistance) {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (diff > 40) {
       nextSlide();
-    } else if (diffX < -minSwipeDistance) {
+    } else if (diff < -40) {
       prevSlide();
     }
     touchStartX.current = null;
-    touchEndX.current = null;
+    setTimeout(() => setIsPaused(false), 2000);
   };
 
-  const handleSelect = (item: (typeof DEFAULT_HEALTH_GOALS)[0]) => {
-    handleInteraction();
+  // Mouse drag handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsPaused(true);
+    isDragging.current = true;
+    mouseStartX.current = e.clientX;
+    dragDistance.current = 0;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging.current || mouseStartX.current === null) return;
+    const diff = mouseStartX.current - e.clientX;
+    dragDistance.current = Math.abs(diff);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!isDragging.current || mouseStartX.current === null) return;
+    const diff = mouseStartX.current - e.clientX;
+    if (diff > 40) {
+      nextSlide();
+    } else if (diff < -40) {
+      prevSlide();
+    }
+    isDragging.current = false;
+    mouseStartX.current = null;
+    setTimeout(() => setIsPaused(false), 2000);
+  };
+
+  const handleMouseLeave = () => {
+    if (isDragging.current) {
+      isDragging.current = false;
+      mouseStartX.current = null;
+      setIsPaused(false);
+    }
+  };
+
+  const handleSelect = (item: (typeof baseItems)[0]) => {
+    // If user dragged to slide, don't trigger selection
+    if (dragDistance.current > 10) return;
+
     if (
       selectedConcern &&
       (selectedConcern.toLowerCase() === item.concernKey.toLowerCase() ||
         selectedConcern.toLowerCase() === item.name.toLowerCase() ||
-        selectedConcern.toLowerCase().replace(/&/g, "and") === item.name.toLowerCase().replace(/&/g, "and"))
+        selectedConcern.toLowerCase().replace(/&/g, "and") ===
+          item.name.toLowerCase().replace(/&/g, "and"))
     ) {
-      // Toggle off -> show all
       onSelectConcern(null);
     } else {
       onSelectConcern(item.concernKey);
     }
   };
 
-  const activeNormalizedIndex = itemCount > 0 ? (currentIndex % itemCount) : 0;
-
-  const activeGoal = useMemo(() => {
-    if (!selectedConcern) return null;
-    return (
-      baseItems.find(
-        (c) =>
-          c.name.toLowerCase() === selectedConcern.toLowerCase() ||
-          c.concernKey.toLowerCase() === selectedConcern.toLowerCase() ||
-          c.name.toLowerCase().replace(/&/g, "and") === selectedConcern.toLowerCase().replace(/&/g, "and")
-      ) || null
-    );
-  }, [selectedConcern, baseItems]);
+  const activeNormalizedIndex = itemCount > 0 ? currentIndex % itemCount : 0;
 
   return (
-    <section id="concerns" className="mx-auto max-w-[1440px] px-4 pt-6 pb-4 sm:pt-10 sm:pb-6 text-center select-none">
-      {/* Taitva Signature Serif Section Header */}
-      <h2 className="text-xl sm:text-2xl md:text-3xl font-serif tracking-widest uppercase text-neutral-800 font-normal">
+    <section
+      id="concerns"
+      className="mx-auto max-w-[1200px] px-4 py-8 sm:py-12 md:px-6 select-none"
+    >
+      {/* Centered Serif Section Title: SHOP BY HEALTH GOAL */}
+      <h2 className="text-xl sm:text-2xl md:text-3xl font-serif tracking-widest uppercase text-neutral-900 font-normal text-center mb-6 sm:mb-8">
         SHOP BY HEALTH GOAL
       </h2>
 
-      {/* 3-Item Auto-Rotating Carousel with Navigation */}
+      {/* 3 Categories Slider Container (Strictly 3 visible, Auto-sliding, User Swipeable) */}
       <div
-        className="relative mx-auto max-w-[840px] px-7 sm:px-12 mt-6 sm:mt-8"
+        className="relative mx-auto max-w-[860px] overflow-hidden cursor-grab active:cursor-grabbing"
         onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
+        onMouseLeave={() => {
+          setIsPaused(false);
+          handleMouseLeave();
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
       >
-        {/* Left Arrow */}
-        {itemCount > 3 && (
-          <button
-            type="button"
-            onClick={() => {
-              handleInteraction();
-              prevSlide();
-            }}
-            className="absolute left-0 sm:left-1 top-1/2 -translate-y-1/2 size-8 sm:size-9 rounded-full bg-white border border-neutral-200/90 shadow-sm flex items-center justify-center text-neutral-700 hover:text-[#023915] hover:border-[#023915] hover:scale-105 active:scale-95 transition cursor-pointer z-10"
-            aria-label="Previous Health Goals"
-          >
-            <ChevronLeft className="size-4 sm:size-5" />
-          </button>
-        )}
+        {/* Slider Track (Displays 3 items across width, advances by 1 item) */}
+        <div
+          onTransitionEnd={handleTransitionEnd}
+          className="flex will-change-transform"
+          style={{
+            transform: `translateX(-${currentIndex * (100 / 3)}%)`,
+            transition: isTransitioning
+              ? "transform 600ms cubic-bezier(0.25, 1, 0.5, 1)"
+              : "none",
+          }}
+        >
+          {extendedList.map((cat, idx) => {
+            const isSelected =
+              selectedConcern !== null &&
+              (selectedConcern.toLowerCase() === cat.concernKey.toLowerCase() ||
+                selectedConcern.toLowerCase() === cat.name.toLowerCase() ||
+                selectedConcern.toLowerCase().replace(/&/g, "and") ===
+                  cat.name.toLowerCase().replace(/&/g, "and"));
 
-        {/* Viewport Frame (Strictly displays 3 items at a time) */}
-        <div className="w-full overflow-hidden py-2">
-          <div
-            onTransitionEnd={handleTransitionEnd}
-            className="flex will-change-transform"
-            style={{
-              transform: `translateX(-${currentIndex * (100 / 3)}%)`,
-              transition: isTransitioning
-                ? "transform 600ms cubic-bezier(0.25, 1, 0.5, 1)"
-                : "none",
-            }}
-          >
-            {extendedList.map((cat, idx) => {
-              const isSelected =
-                selectedConcern !== null &&
-                (selectedConcern.toLowerCase() === cat.concernKey.toLowerCase() ||
-                  selectedConcern.toLowerCase() === cat.name.toLowerCase() ||
-                  selectedConcern.toLowerCase().replace(/&/g, "and") === cat.name.toLowerCase().replace(/&/g, "and"));
-
-              return (
-                <div
-                  key={`${cat.id}_${idx}`}
-                  className="w-1/3 shrink-0 px-2 sm:px-4 flex justify-center"
+            return (
+              <div
+                key={`${cat.id}_${idx}`}
+                className="w-1/3 shrink-0 px-1.5 sm:px-3 md:px-5 flex justify-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleSelect(cat)}
+                  className="group flex flex-col items-center cursor-pointer focus:outline-none w-full"
                 >
-                  <button
-                    onClick={() => handleSelect(cat)}
-                    className="group flex flex-col items-center gap-2 cursor-pointer focus:outline-none"
-                    type="button"
+                  {/* Card Frame:
+                      - MOBILE (< md): Distinct Arched / Dome Frame (aspect-[3/4] rounded-t-full)
+                      - DESKTOP (md+): Perfect Circle Frame (aspect-square rounded-full max-w-[200px])
+                  */}
+                  <div
+                    className={`relative w-full overflow-hidden transition-all duration-300 bg-[#f7f5f0] shadow-xs
+                      aspect-[3/4] rounded-t-full border border-[#023915]/20
+                      md:aspect-square md:rounded-full md:max-w-[200px] md:mx-auto md:border md:border-neutral-200 md:bg-white
+                      ${
+                        isSelected
+                          ? "border-2 border-[#023915] ring-2 ring-[#023915]/20 shadow-md scale-102"
+                          : "group-hover:border-[#023915] group-hover:shadow-md group-hover:scale-102"
+                      }`}
                   >
-                    {/* Circular Packshot Frame */}
-                    <div
-                      className={`size-20 sm:size-24 md:size-28 rounded-full overflow-hidden border transition-all duration-300 p-2 sm:p-2.5 flex items-center justify-center bg-[#f8f9fa] shadow-2xs ${
-                        isSelected
-                          ? "border-2 border-[#023915] ring-2 ring-[#023915]/20 scale-105"
-                          : "border-neutral-200/90 group-hover:border-neutral-400 group-hover:scale-105"
-                      }`}
-                    >
-                      <img
-                        src={cat.image}
-                        alt={cat.name}
-                        className="size-full object-contain"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.src = "/brand/top-botanical-banner.jpg";
-                        }}
-                      />
-                    </div>
+                    <Image
+                      src={cat.image}
+                      alt={cat.name}
+                      fill
+                      unoptimized
+                      className="size-full object-cover group-hover:scale-105 transition-transform duration-500 pointer-events-none rounded-t-full md:rounded-full"
+                    />
+                  </div>
 
-                    {/* Category Label Underneath */}
-                    <span
-                      className={`text-xs sm:text-sm tracking-tight text-center transition-colors line-clamp-1 max-w-[110px] sm:max-w-none ${
-                        isSelected
-                          ? "font-bold text-[#023915]"
-                          : "font-normal text-neutral-700 group-hover:text-[#023915]"
-                      }`}
-                    >
-                      {cat.name}
-                    </span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                  {/* Category Label Underneath */}
+                  <span
+                    className={`mt-2.5 sm:mt-3 text-xs sm:text-sm tracking-wide text-center transition-colors line-clamp-1 ${
+                      isSelected
+                        ? "font-bold text-[#023915]"
+                        : "font-normal text-neutral-800 group-hover:text-[#023915]"
+                    }`}
+                  >
+                    {cat.name}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
         </div>
-
-        {/* Right Arrow */}
-        {itemCount > 3 && (
-          <button
-            type="button"
-            onClick={() => {
-              handleInteraction();
-              nextSlide();
-            }}
-            className="absolute right-0 sm:right-1 top-1/2 -translate-y-1/2 size-8 sm:size-9 rounded-full bg-white border border-neutral-200/90 shadow-sm flex items-center justify-center text-neutral-700 hover:text-[#023915] hover:border-[#023915] hover:scale-105 active:scale-95 transition cursor-pointer z-10"
-            aria-label="Next Health Goals"
-          >
-            <ChevronRight className="size-4 sm:size-5" />
-          </button>
-        )}
-
-        {/* Minimal Progress Dots Below */}
-        {itemCount > 3 && (
-          <div className="flex items-center justify-center gap-1.5 mt-3 sm:mt-4">
-            {baseItems.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => {
-                  handleInteraction();
-                  setIsTransitioning(true);
-                  setCurrentIndex(itemCount + i);
-                }}
-                className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                  activeNormalizedIndex === i
-                    ? "w-5 bg-[#023915]"
-                    : "w-1.5 bg-neutral-300 hover:bg-neutral-400"
-                }`}
-                aria-label={`Go to goal ${i + 1}`}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Active Filter Clear Pill (if a health goal is selected) */}
-      {selectedConcern && (
-        <div className="mt-4 flex items-center justify-center gap-2 animate-in fade-in duration-200">
-          <span className="text-xs text-neutral-500">
-            Showing remedies for{" "}
-            <strong className="text-neutral-800">
-              {activeGoal ? activeGoal.name : selectedConcern}
-            </strong>
-          </span>
-          <button
-            onClick={() => onSelectConcern(null)}
-            className="text-xs font-bold text-[#023915] hover:text-black underline cursor-pointer"
-          >
-            Show All
-          </button>
+      {/* Subtle Pagination Dots (Elongated active pill dot + round inactive dots) */}
+      {itemCount > 3 && (
+        <div className="flex items-center justify-center gap-1.5 mt-5 sm:mt-6">
+          {baseItems.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                setIsTransitioning(true);
+                setCurrentIndex(itemCount + i);
+              }}
+              aria-label={`Go to category ${i + 1}`}
+              className={`rounded-full transition-all duration-300 cursor-pointer ${
+                i === activeNormalizedIndex
+                  ? "w-6 h-1.5 bg-[#023915]"
+                  : "size-1.5 bg-neutral-300 hover:bg-neutral-400"
+              }`}
+            />
+          ))}
         </div>
       )}
     </section>

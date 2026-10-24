@@ -24,9 +24,9 @@ interface AnnouncementBarProps {
 
 const DEFAULT_ANNOUNCEMENT: AnnouncementData = {
   visible: true,
-  text: "Free Kesar Sale Ends in",
-  code: "FREEKESAR",
-  btnText: "Claim Gift",
+  text: "Minimum 30% off on all products.",
+  code: "",
+  btnText: "",
   link: "/#shop",
   bgImage: "/brand/top-botanical-banner.jpg",
   timerDuration: "07:34:59",
@@ -253,8 +253,8 @@ export default function AnnouncementBar({
           href={targetLink}
           className="flex-1 flex items-center justify-center gap-2 text-center group cursor-pointer"
         >
-          <span className="text-xs sm:text-[13px] font-medium tracking-wide text-white group-hover:text-[#c2d4c5] transition-colors">
-            {activeAnnouncement.text || "Extra discounts at checkout."}
+          <span className="text-xs sm:text-[13px] font-semibold tracking-wide text-white group-hover:text-[#c2d4c5] transition-colors">
+            {activeAnnouncement.text || "Minimum 30% off on all products."}
           </span>
 
           {activeAnnouncement.code && (
@@ -264,8 +264,8 @@ export default function AnnouncementBar({
           )}
         </Link>
 
-        {/* Right: Close / Dismiss Button */}
-        <div className="flex items-center justify-end shrink-0 pl-2">
+        {/* Right: Close / Dismiss Button (Hidden on Mobile for Clean Centered View) */}
+        <div className="hidden sm:flex items-center justify-end shrink-0 pl-2">
           <button
             onClick={handleDismiss}
             className="rounded-full p-1 text-white/70 hover:text-white hover:bg-black/20 transition-all cursor-pointer"
