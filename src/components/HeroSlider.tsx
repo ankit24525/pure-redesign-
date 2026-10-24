@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { heroSlides as defaultSlides } from "@/lib/store";
 
 export default function HeroSlider({
@@ -287,35 +286,6 @@ export default function HeroSlider({
               );
             })}
           </div>
-
-          {/* Arrow Navigation Controls (Inside the Banner Container on Left & Right) */}
-          {slideCount > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  handleInteraction();
-                  prevSlide();
-                }}
-                className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 size-8 sm:size-9 rounded-full bg-white/95 hover:bg-white border border-neutral-300 shadow-sm flex items-center justify-center text-neutral-800 hover:text-black hover:scale-105 active:scale-95 transition cursor-pointer z-20"
-                aria-label="Previous Slide"
-              >
-                <ChevronLeft className="size-4 sm:size-5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handleInteraction();
-                  nextSlide();
-                }}
-                className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 size-8 sm:size-9 rounded-full bg-white/95 hover:bg-white border border-neutral-300 shadow-sm flex items-center justify-center text-neutral-800 hover:text-black hover:scale-105 active:scale-95 transition cursor-pointer z-20"
-                aria-label="Next Slide"
-              >
-                <ChevronRight className="size-4 sm:size-5" />
-              </button>
-            </>
-          )}
         </div>
 
         {/* Taitva Centered Pagination Dots (Directly Below Banner Frame) */}
